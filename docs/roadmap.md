@@ -2,12 +2,270 @@
 
 ---
 
-## Phase 1: Deep Research Tool
+## Phase 1: Simplification Refactor
+
+**Branch:** `refactor/simplify`
+**Status:** Planning
+
+Remove unnecessary interfaces, integrations, and dead code to reduce the codebase by ~30,000 lines. A leaner codebase is easier to maintain, test, and port. Run this first -- work on a smaller surface.
+
+### 1.1 Remove RL Training Subsystem (~11,700 lines)
+
+The entire RL training pipeline is self-contained with no connection to core agent functionality.
+
+| Remove | Lines | Description |
+|--------|-------|-------------|
+| `tools/rl_training_tool.py` | 1,402 | 10 RL training tools (Tinker-Atropos) |
+| `rl_cli.py` | 446 | RL Training CLI runner |
+| `batch_runner.py` | 1,285 | Parallel batch processing for RL data gen |
+| `mini_swe_runner.py` | 709 | SWE benchmark runner |
+| `trajectory_compressor.py` | 1,518 | RL trajectory post-processing |
+| `toolset_distributions.py` | 364 | Toolset probability distributions for RL |
+| `environments/` (entire dir) | 7,175 | Atropos training envs + 11 tool call parsers |
+| `tinker-atropos/` | -- | Empty submodule placeholder |
+| `datagen-config-examples/` | -- | RL pipeline YAML configs |
+
+Also remove `rl_training_tool` from `_discover_tools()` in `model_tools.py` and `_HERMES_CORE_TOOLS` in `toolsets.py`.
+
+### 1.2 Remove Gateway Adapters Except Telegram + API Server (~12,200 lines)
+
+Keep only `telegram.py`, `telegram_network.py`, `base.py`, and `api_server.py`.
+
+| Remove | Lines | Description |
+|--------|-------|-------------|
+| `discord.py` | 2,346 | Discord bot adapter |
+| `feishu.py` | 3,255 | Feishu/Lark (Chinese enterprise) |
+| `wecom.py` | 1,338 | WeChat Work (Chinese enterprise) |
+| `dingtalk.py` | 340 | DingTalk (Chinese enterprise) |
+| `slack.py` | 998 | Slack bot adapter |
+| `whatsapp.py` | 941 | WhatsApp adapter |
+| `signal.py` | 807 | Signal adapter |
+| `matrix.py` | 1,217 | Matrix adapter |
+| `email.py` | 621 | IMAP/SMTP adapter |
+| `mattermost.py` | 723 | Mattermost adapter |
+| `webhook.py` | 616 | Generic webhook receiver |
+| `sms.py` | 276 | Twilio SMS adapter |
+| `homeassistant.py` | 449 | HA gateway adapter |
+
+Also remove their tests and gateway dispatch code for these platforms in `gateway/run.py`.
+
+### 1.3 Consolidate Memory Plugins (~3,000 lines removed)
+
+Remove 6 memory provider plugins, keep only Honcho:
+
+| Keep | Remove |
+|------|--------|
+| `plugins/memory/honcho/` (3,389 lines) | `plugins/memory/holographic/` (1,778 lines) |
+| `plugins/memory/__init__.py` (discovery) | `plugins/memory/openviking/` (582 lines) |
+| | `plugins/memory/hindsight/` (358 lines) |
+| | `plugins/memory/mem0/` (344 lines) |
+| | `plugins/memory/byterover/` (383 lines) |
+| | `plugins/memory/retaindb/` (302 lines) |
+
+### 1.4 Simplify Skills System (~4,000 lines removed)
+
+Strip to local-only skill loading. Remove the marketplace/hub infrastructure:
+
+| Remove | Lines | Description |
+|--------|-------|-------------|
+| `tools/skills_hub.py` | 2,707 | Full skill registry/marketplace with GitHub auth |
+| `tools/skills_guard.py` | 1,105 | Security scanner for community skills |
+| `hermes_cli/skills_hub.py` | 1,219 | CLI `/skills` marketplace command |
+
+Keep: `tools/skills_tool.py` (agent reads local skills), `tools/skill_manager_tool.py` (agent creates skills), `tools/skills_sync.py` (manifest sync), `agent/skill_commands.py` (slash commands), local `skills/` and `optional-skills/` directories.
+
+### 1.5 Remove Niche Tools from Core (~3,200 lines from tool schemas)
+
+Move these out of `_HERMES_CORE_TOOLS` into opt-in toolsets or remove entirely:
+
+| Tool | Lines | Action |
+|------|-------|--------|
+| `tools/mixture_of_agents_tool.py` | 562 | Remove -- experimental, 4x API calls per invocation |
+| `tools/image_generation_tool.py` | 703 | Move to `image_gen` opt-in toolset (zero tests) |
+| `tools/homeassistant_tool.py` | 490 | Move to `homeassistant` opt-in toolset |
+| `tools/browser_camofox.py` + state | 618 | Move to `camofox` opt-in toolset |
+| `tools/cronjob_tools.py` | 458 | Move to `cron` opt-in toolset |
+| `tools/voice_mode.py` | 812 | Keep but make fully lazy/optional |
+| `tools/tts_tool.py` + `neutts_synth.py` | 990 | Move to `tts` opt-in toolset |
+
+### 1.6 Remove Static Assets
+
+| Remove | Description |
+|--------|-------------|
+| `website/` (3.4MB) | Docusaurus docs site -- separate project |
+| `landingpage/` (316KB) | Static landing page -- separate project |
+
+### 1.7 Architectural Simplification (Higher Effort)
+
+| Task | Description |
+|------|-------------|
+| Consolidate config loaders | Merge 3 separate config systems (`cli.py`, `hermes_cli/config.py`, `gateway/run.py`) into one canonical loader |
+| Remove Nous-specific routing | `tools/managed_tool_gateway.py` + `hermes_cli/nous_subscription.py` -- vendor-specific infrastructure |
+| Merge `hermes_cli/plugins.py` + `plugins_cmd.py` | Two files doing one job |
+| Remove niche terminal environments | `daytona.py` and `singularity.py` -- very few users |
+
+### Phased Delivery
+
+| Step | Deliverable | Test Gate |
+|------|------------|-----------|
+| 1a | Remove RL subsystem + static assets | Full test suite passes, no dangling imports |
+| 1b | Remove all gateway adapters except Telegram + API server | Gateway tests pass for remaining platforms |
+| 1c | Remove memory plugins (keep Honcho only) | Memory tests pass for Honcho |
+| 1d | Strip skills system to local-only | Skill loading/creation still works |
+| 1e | Move niche tools out of core | Tool discovery tests pass, opt-in toolsets work |
+| 1f | Consolidate config loaders | All 3 entry points (CLI, setup, gateway) use single loader |
+| 1g | Remove Nous-specific routing + merge plugin files | No vendor-specific code paths remain |
+
+### Estimated Impact
+
+| Metric | Before | After |
+|--------|--------|-------|
+| Python lines (tools/) | ~36,900 | ~29,700 |
+| Python lines (gateway/platforms/) | ~14,100 | ~3,900 |
+| Python lines (plugins/) | ~7,350 | ~3,600 |
+| Total Python lines removed | -- | ~30,000+ |
+| Static assets removed | -- | ~3.7MB |
+| Tools in `_HERMES_CORE_TOOLS` | ~30 | ~20 |
+| Gateway platform adapters | 15 | 2 (Telegram + API server) |
+
+---
+
+## Phase 2: Unified Knowledge Base
+
+**Branch:** TBD
+**Research:** `docs/to-study/about-memory-systems.md`
+
+Filesystem-first, not RAG. The agent explores knowledge the same way it explores code -- with `ls`, `cat`, `grep`. No sqlite-vec, no embeddings, no L0/L1/L2 tiering. Just directories of markdown files and FTS5.
+
+### Why Filesystem-First
+
+AI agents thrive in filesystem architectures. The agent already knows how to navigate directories, read files, and search content -- why build a parallel retrieval system when `file_tools.py` already works?
+
+Traditional RAG is passive: the agent receives chunks. Filesystem-first is active: the agent explores structure, drills down, cross-references. Meaning stays in context. Sources: [Mintlify ChromaFs](https://www.mintlify.com/blog/how-we-built-a-virtual-filesystem-for-our-assistant), [arXiv:2601.11672](https://arxiv.org/abs/2601.11672)
+
+### Architecture
+
+```
+Knowledge Directory (source of truth)
+~/.hermes/knowledge/
+  bookmarks/        -- X bookmarks (one .md per tweet or thread)
+  sessions/        -- Hermes session exports
+  articles/        -- web_extract'd articles
+  papers/          -- arXiv / PDF papers
+  notes/           -- manual entries
+
+Agent explores via file_tools (ls, cat, grep) -- no special tool needed
+Agent searches via knowledge_search tool (FTS5 across all sources)
+```
+
+**No sqlite-vec, no embeddings, no L0/L1/L2.** FTS5 keyword search is sufficient for a personal knowledge base. If semantic search is needed later, add it as a thin layer over the existing FTS5 foundation.
+
+**No separate SQLite index.** The markdown files are the index. Directories and filenames provide structure. Frontmatter provides metadata. No derived state to keep in sync.
+
+### File Format
+
+```markdown
+---
+source: https://x.com/user/status/123456
+type: bookmark
+author: username
+bookmarked_at: 2026-04-03
+tags: [topic, topic]
+---
+
+@username · Apr 3, 2026
+
+Post text here. Full tweet content, no truncation.
+Links, mentions, hashtags all preserved.
+```
+
+Frontmatter fields: `source`, `type` (bookmark/article/paper/session/note), `author`, `bookmarked_at`/`ingested`/`created_at`, `tags`. No enforced schema -- frontmatter is optional metadata.
+
+### Data Sources
+
+| Source | Storage | How agent accesses it |
+|--------|---------|---------------------|
+| X bookmarks | `bookmarks/*.md` | `cat` + `grep` via file_tools |
+| Hermes sessions | `sessions/*.md` | `cat` + `grep` via file_tools |
+| Articles | `articles/*.md` | `cat` + `grep` via file_tools |
+| Papers | `papers/*.md` | `cat` + `grep` via file_tools |
+| Notes | `notes/*.md` | `cat` + `grep` via file_tools |
+
+### Tool: `knowledge_search`
+
+```json
+{
+  "name": "knowledge_search",
+  "description": "Search the local knowledge base (bookmarks, sessions, articles, papers, notes) using keyword search",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "query": {"type": "string", "description": "Search query"},
+      "source": {"type": "string", "enum": ["all", "bookmarks", "sessions", "articles", "papers", "notes"], "default": "all"},
+      "limit": {"type": "integer", "default": 10}
+    },
+    "required": ["query"]
+  }
+}
+```
+
+Internally: walks `~/.hermes/knowledge/<source>/`, does FTS5 across all `.md` files. Returns matching file paths + snippets. The agent then uses `cat` to read the full content.
+
+### Tool: `knowledge_import`
+
+```json
+{
+  "name": "knowledge_import",
+  "description": "Import content into the knowledge base",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "url": {"type": "string", "description": "URL to extract and import"},
+      "text": {"type": "string", "description": "Raw text to import as a note"},
+      "type": {"type": "string", "enum": ["article", "paper", "note"], "default": "article"}
+    }
+  }
+}
+```
+
+For URLs: calls `web_extract`, writes markdown to `articles/`. For text: wraps in minimal frontmatter, writes to `notes/`. For X bookmarks: reads `~/.hermes/x_bookmarks.db` directly, writes each bookmark to `bookmarks/`.
+
+**Note:** X bookmark sync is now a read path, not a separate tool. The agent reads the SQLite DB and writes markdown on demand (or once, as a batch import). No continuous sync loop. User runs `hermes kb sync bookmarks` from CLI to import.
+
+### CLI Commands
+
+- `hermes kb search <query>` -- search from CLI, print results
+- `hermes kb import <url|text>` -- import article or note
+- `hermes kb sync bookmarks` -- batch import X bookmarks from SQLite to markdown
+- `hermes kb ls [source]` -- list entries by source
+- `hermes kb stats` -- count entries per source
+
+### What NOT to Build
+
+- No sqlite-vec or vector embeddings
+- No L0/L1/L2 tiered context (Hermes already has context compression)
+- No sqlite-vec / embedding generation pipeline
+- No separate `knowledge.db` index -- files are the index
+- No continuous X bookmark sync -- just batch import on demand
+
+### Phased Delivery
+
+| Step | Deliverable | Test Gate |
+|------|------------|-----------|
+| 2a | File layout + `knowledge_search` FTS5 tool over bookmarks | Search accuracy tests against fixture bookmarks |
+| 2b | Session and article sources in `knowledge_search` | Each source searchable |
+| 2c | `knowledge_import` for URL and text | Import fixtures, verify files written |
+| 2d | `hermes kb` CLI commands | CLI manual test |
+| 2e | X bookmark batch import (`hermes kb sync bookmarks`) | Import fixture DB, verify markdown files |
+
+---
+
+## Phase 3: Deep Research Tool
 
 **Branch:** `feat/deep-research`
 **Plan:** `docs/deep-research-plan.md`
 
-Multi-step research tool with a source trust hierarchy (arXiv, Semantic Scholar, Wikipedia, filtered web search). Accessible via CLI and Telegram as a registered tool.
+Multi-step research tool with a source trust hierarchy (arXiv, Semantic Scholar, Wikipedia, filtered web search). Accessible via CLI and Telegram as a registered tool. Results feed into the Knowledge Base (Phase 2) as papers and articles.
 
 **Sub-phases:**
 
@@ -22,374 +280,17 @@ Multi-step research tool with a source trust hierarchy (arXiv, Semantic Scholar,
 
 ---
 
-## Phase 2: X Bookmarks Tool
-
-**Branch:** `feat/x-bookmarks`
-
-Hermes tool that syncs your X bookmarks to a local SQLite database, queryable by the agent. This is the first data source feeding into the future Knowledge Base (Phase 4).
-
-### 2.1 API and Auth
-
-- X API v2 `GET /2/users/{id}/bookmarks` endpoint
-- OAuth 2.0 user-context with scopes: `bookmark.read`, `tweet.read`, `users.read`
-- Manual setup: user creates X developer app, configures `X_CLIENT_ID`, `X_CLIENT_SECRET`, `X_ACCESS_TOKEN`, `X_REFRESH_TOKEN` in `~/.hermes/.env`
-- Tool handles token refresh automatically using the refresh token
-- Add to `OPTIONAL_ENV_VARS` in `hermes_cli/config.py`
-
-### 2.2 Database Schema (`~/.hermes/x_bookmarks.db`)
-
-```sql
-CREATE TABLE bookmarks (
-    tweet_id TEXT PRIMARY KEY,
-    text TEXT NOT NULL,
-    note_tweet_text TEXT,
-    author_id TEXT NOT NULL,
-    author_username TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    bookmarked_at TEXT NOT NULL,
-    conversation_id TEXT,
-    in_reply_to_tweet_id TEXT,
-    lang TEXT,
-    retweet_count INTEGER,
-    reply_count INTEGER,
-    like_count INTEGER,
-    bookmark_count INTEGER,
-    impression_count INTEGER,
-    raw_json TEXT
-);
-
-CREATE TABLE sync_state (
-    key TEXT PRIMARY KEY,
-    value TEXT NOT NULL
-);
-
-CREATE VIRTUAL TABLE bookmarks_fts USING fts5(
-    text, note_tweet_text, author_username,
-    content=bookmarks,
-    content_rowid=rowid,
-    tokenize='unicode61'
-);
-```
-
-Text-only storage. No media, no URL extraction tables. Articles linked in posts will be handled by the Knowledge Base ingestion pipeline (Phase 4), not by this tool.
-
-### 2.3 Tool Schema
-
-```json
-{
-  "name": "x_bookmarks",
-  "description": "Sync and query your X/Twitter bookmarks from a local database",
-  "parameters": {
-    "type": "object",
-    "properties": {
-      "action": {
-        "type": "string",
-        "enum": ["sync", "search", "stats", "recent"],
-        "description": "sync: fetch new bookmarks, search: FTS query, stats: count/summary, recent: last N bookmarks"
-      },
-      "query": {"type": "string", "description": "Search query (for action=search)"},
-      "limit": {"type": "integer", "description": "Max results (for search/recent, default 10)"},
-      "full_sync": {"type": "boolean", "description": "Force full re-fetch instead of incremental (default: false)"}
-    },
-    "required": ["action"]
-  }
-}
-```
-
-### 2.4 Integration Points
-
-1. `tools/x_bookmarks.py` -- new tool file with all logic
-2. `model_tools.py` -- add `import tools.x_bookmarks` to `_discover_tools()`
-3. `toolsets.py` -- add `x_bookmarks` to `web` toolset (or new `knowledge` toolset)
-4. `hermes_cli/config.py` -- add X env vars to `OPTIONAL_ENV_VARS`
-5. `hermes_constants.py` -- DB path via `get_hermes_home() / "x_bookmarks.db"`
-
-### 2.5 Phased Delivery
-
-| Step | Deliverable | Test Gate |
-|------|------------|-----------|
-| 2a | DB schema + migration, env vars config | Schema creates cleanly, config loads |
-| 2b | X API client (auth, pagination, rate limiting) | Unit tests with mocked responses |
-| 2c | Sync logic (incremental + full) | Integration test with fixture data |
-| 2d | Search/query actions (FTS5) | Search accuracy tests |
-| 2e | Tool registration + agent integration | CLI manual test |
-
-### 2.6 Technical Notes
-
-- **Rate limits:** Respect `x-rate-limit-*` headers, store reset times in `sync_state`
-- **Pagination:** `max_results=100` per page, paginate via `next_token`. Incremental sync stops when hitting a bookmark already in the DB
-- **Profile-safe:** DB path uses `get_hermes_home()`, each profile gets its own bookmarks DB
-- **Token refresh:** Tool checks OAuth 2.0 token expiry before each call, refreshes automatically
-
----
-
-## Phase 3: Knowledge Base and Memory Layer
-
-**Branch:** TBD
-**Research:** `docs/to-study/about-memory-systems.md`
-
-### Vision
-
-A personal knowledge base -- built from and for the user -- where Hermes Agent ingests papers, articles, blog posts, X posts, past sessions, and memories into a unified local store. The agent explores and reasons over this knowledge to provide better, more personalized responses over time. This is the foundation for Hermes to truly learn from the user.
-
-### Research Foundation
-
-The study materials in `docs/to-study/about-memory-systems.md` inform three key design decisions:
-
-**1. Filesystem-first, not chunked RAG**
-
-Traditional RAG embeds document chunks into vectors and retrieves top-K matches. This is structurally limited: meaning spans across chunks, across documents, across topics. The agent receives fragments with no structural context -- no sense of where a chunk sits in the hierarchy of ideas. It is like trying to understand a book by reading five random paragraphs.
-
-The alternative converging across the industry is the filesystem approach. Mintlify built ChromaFs -- a virtual filesystem over their Chroma database where each doc page is a file and each section is a directory. The agent navigates with `grep`, `cat`, `ls`, `find` -- exploring structure, drilling down, cross-referencing, building its own mental model. With RAG the agent is passive (receives chunks). With a filesystem the agent is active (explores structure). Session creation dropped from 46 seconds to 100ms.
-
-The paper "From Everything-is-a-File to Files-Are-All-You-Need" (arXiv:2601.11672) formalizes this: file-like abstractions and code-based specifications collapse diverse resources into consistent, composable interfaces that are more maintainable, auditable, and operationally robust for agents.
-
-Hermes already has `file_tools.py` -- the agent already knows how to explore filesystems. The knowledge base should work the same way.
-
-> Sources: [Mintlify ChromaFs](https://www.mintlify.com/blog/how-we-built-a-virtual-filesystem-for-our-assistant), [arXiv:2601.11672](https://arxiv.org/abs/2601.11672)
-
-**2. Memory as Reasoning (not just storage)**
-
-The dominant approach in agent memory is extract-facts-embed-store-retrieve. Plastic Labs argues this is skeuomorphic -- it copies database patterns into AI systems without leveraging what LLMs actually do well: reasoning. Their thesis: memory should be treated as a prediction task powered by logical reasoning (deductive, inductive, abductive). Instead of storing static facts, the system reasons over data to produce composable conclusions about the user that can be re-synthesized at inference time.
-
-This is Honcho's secret sauce: it is not that Honcho has a better database. It is that Honcho applies a good LLM to reason over the user's data. The storage (Postgres + pgvector) is standard. What makes Honcho valuable is the dialectical reasoning layer -- `peer.chat()` takes a natural language question and returns reasoning-informed conclusions drawn from everything Honcho knows about the user.
-
-For the knowledge base, this means: local search retrieves. Honcho (or an equivalent reasoning step) synthesizes. These are complementary capabilities.
-
-> Source: [Memory as Reasoning](https://blog.plasticlabs.ai/blog/Memory-as-Reasoning)
-
-**3. Tiered Context (L0/L1/L2)**
-
-OpenViking introduces a three-tier content model: L0 (one-sentence summary for routing), L1 (core information for planning), L2 (full original data for deep reading). This avoids the all-or-nothing problem of stuffing entire documents into context. Combined with Hermes' existing context compression, this could dramatically reduce token usage while preserving relevance.
-
-> Source: [OpenViking](https://github.com/volcengine/OpenViking)
-
-### Data Sources
-
-| Source | Ingestion Method | Content Type |
-|--------|-----------------|--------------|
-| X bookmarks | Phase 2 tool (already in SQLite) | Posts, threads |
-| Papers (arXiv, etc.) | Deep Research tool results, direct PDFs | Academic papers |
-| Articles and blog posts | `web_extract` via URL or RSS feeds | Long-form text |
-| Chat sessions | Session history export | Conversations |
-| Memories | Existing Hermes memory system | Notes, preferences |
-| Manual entries | Direct text/file input | Any text |
-
-### Current State of Memory in Hermes
-
-Hermes already has a learning system:
-
-- **Memory files** (`~/.hermes/memories/`) -- flat text files for user notes and preferences, read at session start, writable via the `memory` tool
-- **Session history** -- full conversation logs stored in SQLite with FTS5 search (`hermes_state.py`)
-- **Skill creation from experience** -- Hermes can create and improve skills from usage patterns
-- **Cross-session user modeling** -- builds a model of the user across sessions
-- **Honcho integration** -- existing integration (`plugins/memory/honcho/`, `docs/honcho-integration-spec.md`) with four tools (`honcho_profile`, `honcho_search`, `honcho_context`, `honcho_conclude`), async prefetch, per-peer memory modes, dialectical reasoning
-
-What is missing: no unified schema across sources, no filesystem-style knowledge exploration, no semantic search over external content, no cross-referencing between memories and other knowledge, no tiered context loading, no automated ingestion pipeline for external content.
-
-### Architecture: Filesystem-First with Search Acceleration
-
-```
-Data Sources --> Ingestion Pipeline --> Markdown Files (source of truth)
-                                        + SQLite Index (derived, rebuildable)
-                                              |
-                              +---------------+---------------+
-                              |                               |
-                        Agent explores                  Agent queries
-                   via existing file_tools          via knowledge_search tool
-                   (ls, cat, grep, find)            (FTS5 + sqlite-vec)
-                              |                               |
-                              +---------------+---------------+
-                                              |
-                                     Reasoning Layer (optional)
-                                     Honcho dialectical API or
-                                     local LLM reasoning step
-                                              |
-                                              v
-                                       Agent Context
-```
-
-**Source of truth: Markdown files on disk.**
-
-```
-~/.hermes/knowledge/
-  topics/
-    memory-systems.md
-    rust-async-runtime.md
-    x-api-bookmarks.md
-  sources/
-    x-bookmarks/
-      2026-04-03-abc123.md
-    papers/
-      2601.11672-everything-is-a-file.md
-    articles/
-      mintlify-virtual-filesystem.md
-    sessions/
-      2026-04-03-project-foo.md
-```
-
-Why markdown files, not just a database:
-
-- **Human-readable and agent-readable.** You can read and edit your knowledge base with any text editor. The agent can read it with `cat`. No serialization barrier.
-- **Structural metadata for free.** Headings (`#`, `##`) create hierarchy. Links (`[text](url)`) create cross-references. The agent can `grep` for headings to navigate, just like navigating a codebase.
-- **Composable via filesystem.** A directory of markdown files is a filesystem. The agent can `ls` to see topics, `cat` to read, `grep` to search. This is the ChromaFs / "everything is a file" pattern. Hermes already has `file_tools.py` -- the agent already knows how to do this.
-- **No schema lock-in.** SQLite tables force you to predict what fields you will need. Markdown with YAML frontmatter gives you structured metadata where needed without constraining the format.
-- **Resilient.** If the index gets corrupted, `hermes knowledge rebuild-index` regenerates it from the files. The files are always the source of truth.
-- **Portable.** Standard markdown. Works with git, any editor, any static site generator, any future tool.
-
-**Search acceleration: SQLite index (derived artifact).**
-
-A single SQLite database at `~/.hermes/knowledge.db` (profile-safe via `get_hermes_home()`) provides fast search over the markdown content:
-
-- **FTS5** for keyword/exact match -- already used in Hermes sessions, extend to knowledge base
-- **sqlite-vec** for semantic/concept match -- brute-force KNN is acceptable for a personal-scale dataset
-- **File tracking** -- maps each markdown file to its indexed state (path, hash, last indexed timestamp). Detects new/modified/deleted files for incremental reindexing
-
-The index is always derivable from the markdown files. It exists for speed, not for storage.
-
-**Context tiering:** Every markdown file gets three representations stored in the index:
-- **L0** -- one-sentence summary (~100 tokens) for relevance routing
-- **L1** -- core information + key points (~2k tokens) for planning
-- **L2** -- the full markdown file itself (unbounded, read directly from disk)
-
-The `knowledge_search` tool retrieves L0 summaries first to identify relevant items, then promotes to L1 or reads L2 from disk as needed.
-
-### File Format
-
-Each markdown file uses YAML frontmatter for metadata:
-
-```markdown
----
-title: "How we built a virtual filesystem for our Assistant"
-source: https://www.mintlify.com/blog/how-we-built-a-virtual-filesystem-for-our-assistant
-type: article
-authors: ["Dens Sumesh"]
-tags: [filesystem, rag, agents, virtual-filesystem]
-ingested: 2026-04-04
----
-
-# How we built a virtual filesystem for our Assistant
-
-RAG is great, until it isn't. Our assistant could only retrieve chunks
-of text that matched a query...
-
-## The Container Bottleneck
-...
-```
-
-Frontmatter fields:
-- `title` -- human-readable title
-- `source` -- original URL or reference (optional for manual entries)
-- `type` -- one of: `article`, `paper`, `post`, `session`, `memory`, `note`
-- `authors` -- list of author names (optional)
-- `tags` -- freeform tags for categorization
-- `ingested` -- date the file was added to the knowledge base
-- Additional fields allowed per source type (e.g., `tweet_id`, `arxiv_id`, `session_id`)
-
-### Memory System Comparison
-
-Four candidate systems evaluated from the research materials:
-
-| Dimension | Honcho | mem0 | OpenViking | Local-first (markdown + sqlite) |
-|-----------|--------|------|------------|----------------------------------|
-| **License** | AGPL-3.0 | Apache 2.0 | AGPLv3 | N/A (custom) |
-| **Core model** | Peer paradigm (entity-centric) | User/Session/Agent scopes | Virtual filesystem (viking://) | Real filesystem (markdown files) |
-| **Storage** | Postgres + pgvector | Configurable vector store | Local filesystem + LanceDB | Markdown files + SQLite index |
-| **Retrieval** | Dialectical reasoning + hybrid search | Semantic search | Recursive directory retrieval | FTS5 + sqlite-vec + file_tools |
-| **Reasoning** | Built-in (deriver worker, LLM-powered) | Fact extraction via LLM | VLM-based tiering | Optional (Honcho or local LLM) |
-| **Dependencies** | Postgres, 4+ LLM providers | OpenAI default, configurable | C++ compiler, embedding + VLM models | sqlite-vec extension |
-| **Human-editable** | No (stored in Postgres) | No (stored in vector DB) | Partial (filesystem but viking:// URIs) | Yes (standard markdown files) |
-| **Rebuildability** | No (Postgres is source of truth) | No (vector store is source of truth) | Partial | Yes (index derived from files) |
-| **Privacy** | Self-hosted possible but heavy | Self-hosted possible | Self-hosted | Fully local |
-
-**Key insight:** The filesystem-first approach is orthogonal to Honcho. Markdown files + SQLite index handle storage and retrieval. Honcho handles reasoning. They compose:
-
-- **Storage/retrieval:** Local markdown + FTS5 + sqlite-vec (always available, no dependencies)
-- **Reasoning:** Honcho's dialectical API as an optional layer, or a local LLM call over retrieved results
-
-This avoids the false choice between "Honcho vs. local-first." Honcho is not a storage system you commit to -- it is a reasoning service you layer on top of your own data.
-
-### What Needs to Be Built
-
-1. **File layout and conventions** -- Directory structure under `~/.hermes/knowledge/`, markdown frontmatter schema, naming conventions. This is the foundation everything else builds on.
-
-2. **SQLite search index** -- `~/.hermes/knowledge.db` with FTS5 tables, sqlite-vec virtual tables, and a file tracking table (path, content hash, last indexed). Incremental reindexing: scan for new/modified/deleted files, update only what changed. A `hermes knowledge rebuild-index` command regenerates the full index from the markdown files.
-
-3. **Ingestion pipeline** -- Per-source importers that write markdown files:
-   - **X bookmarks importer** -- reads Phase 2's `x_bookmarks.db`, writes one markdown file per bookmark (or threads merged into a single file) into `sources/x-bookmarks/`
-   - **Article importer** -- takes a URL, calls `web_extract`, writes markdown file into `sources/articles/`
-   - **Paper importer** -- takes an arXiv ID or PDF, extracts text, writes into `sources/papers/`
-   - **Session importer** -- exports past Hermes sessions into `sources/sessions/`
-   - **Manual importer** -- takes raw text, wraps in frontmatter, writes into `topics/` or `sources/notes/`
-   - Each importer generates L0/L1 summaries and updates the SQLite index
-
-4. **Embedding generation** -- Embed markdown content for sqlite-vec. Options: `sqlite-lembed` for local `.gguf` model embeddings (fully offline), `sqlite-rembed` for API-based embeddings (OpenAI, etc.), or a custom embedding step during ingestion. The embedding is stored in the index, not in the markdown file.
-
-5. **`knowledge_search` tool** -- Registered Hermes tool with two retrieval lanes:
-   - **FTS5 lane** -- keyword search over indexed content
-   - **sqlite-vec lane** -- semantic search via vector similarity
-   - Results return L0 summaries by default. The agent can request L1 (from index) or L2 (reads the markdown file from disk). The agent can also use `file_tools` to explore the `knowledge/` directory directly -- no special tool needed for browsing.
-
-6. **CLI commands** -- `hermes knowledge` subcommands:
-   - `hermes knowledge import <url|file|text>` -- ingest content
-   - `hermes knowledge search <query>` -- search from CLI
-   - `hermes knowledge rebuild-index` -- regenerate SQLite index from files
-   - `hermes knowledge stats` -- show counts by source type, index health
-
-7. **Reasoning layer (optional)** -- After retrieval, optionally pass results through a reasoning step:
-   - **Honcho path:** Send retrieved knowledge + user query to Honcho's dialectical API. Honcho returns synthesized conclusions.
-   - **Local path:** Pass retrieved knowledge + user query to the agent's LLM with a reasoning prompt (deductive/inductive/abductive). No external service needed.
-   - This step transforms "here are relevant documents" into "here is what your accumulated knowledge says about this question."
-
-8. **Cross-session user modeling** -- Extend the existing memory system. When the agent learns something new about the user, write it as a markdown note in `topics/` with proper frontmatter and indexing. Over time, the `topics/` directory becomes a rich model of the user's interests, expertise, and preferences -- queryable and explorable just like any other knowledge.
-
-### Honcho's Role
-
-Having analyzed Honcho's actual value proposition (see `plugins/memory/honcho/` for the existing integration), the conclusion is:
-
-**Honcho's value is the reasoning layer, not the storage layer.**
-
-What Honcho actually does well:
-- `peer.chat()` -- dialectical reasoning over accumulated user data. Takes a natural language question, returns reasoning-informed conclusions. This is genuinely hard to replicate locally without a dedicated reasoning model and pipeline.
-- `honcho_profile` / peer cards -- pre-computed representations of the user that update asynchronously. Zero-latency at retrieval time.
-- Cross-session accumulation -- builds a model of the user across all conversations, all projects. More holistic than per-session context.
-
-What Honcho does not do well for this use case:
-- Storage is Postgres + pgvector -- heavy infrastructure for a personal knowledge base
-- AGPL-3.0 license -- copyleft constraint
-- Data leaves the machine unless self-hosted (and self-hosting requires Postgres + worker processes)
-- No filesystem interface -- the agent cannot `ls` or `grep` Honcho's storage
-
-**Strategy:** Keep Honcho as-is for user modeling (the existing integration works well). Do not use Honcho as the knowledge base storage layer. The knowledge base is markdown files + SQLite index, fully local. If the reasoning layer proves valuable in practice, add Honcho's dialectical API as an optional post-retrieval step -- it reasons over the knowledge base results without owning the data.
-
-### Phased Delivery
-
-| Step | Deliverable | Test Gate |
-|------|------------|-----------|
-| 3a | Spec document -- file layout, frontmatter schema, index schema, importer interfaces | Spec reviewed |
-| 3b | File layout + SQLite index -- directory structure, FTS5 + sqlite-vec tables, file tracking, `rebuild-index` command | Index builds from fixture markdown files, FTS5 search works |
-| 3c | Ingestion pipeline core -- importer base class, X bookmarks importer (reads Phase 2 DB, writes markdown), manual text importer | Import X bookmarks fixtures, verify files written correctly, index updated |
-| 3d | `knowledge_search` tool -- FTS5 + sqlite-vec dual-lane search, L0/L1/L2 tiering | Search accuracy tests against imported bookmarks |
-| 3e | Article/paper importers -- `web_extract`-based URL ingestion, arXiv PDF ingestion | End-to-end import test |
-| 3f | Session importer -- past Hermes conversations into markdown files | Import existing sessions |
-| 3g | CLI commands -- `hermes knowledge import/search/rebuild-index/stats` | CLI manual test |
-| 3h | Reasoning layer evaluation -- test Honcho dialectical API vs. local LLM reasoning over retrieved results with real usage data | Decision documented |
-
-This phase requires its own spec document (step 3a) before implementation begins.
-
----
-
 ## Phase 4: Rust Port (Long-Term)
 
 **Branch:** TBD
 **Status:** Long-term goal, not actively in progress
 
-Full Python-to-Rust rewrite of the Hermes Agent codebase for improved performance.
+Full Python-to-Rust rewrite of the Hermes Agent codebase for improved performance. Targets the simplified architecture from Phase 1.
 
 ### Prerequisites
 
-- Phase 1 and Phase 2 shipped and stable
-- Knowledge Base architecture (Phase 3) finalized, so the Rust port targets the final architecture
+- Phases 1-3 shipped and stable
+- Simplification refactor (Phase 1) completed -- port targets the lean codebase
 - Feasibility study completed: audit all Python dependencies for Rust crate equivalents, benchmark current hot paths
 
 ### Phased Approach
@@ -397,7 +298,7 @@ Full Python-to-Rust rewrite of the Hermes Agent codebase for improved performanc
 1. **Feasibility study** -- Audit dependencies, map module dependency graph, identify Rust crate equivalents, benchmark Python hot paths
 2. **Core foundation** -- Agent loop, LLM provider clients (OpenAI-compatible), tool dispatch framework, message types
 3. **Tool ports** -- Incremental, maintaining Python FFI bridge for complex tools. Priority by usage frequency: terminal, file, web, delegate, then browser, MCP, etc.
-4. **CLI + Gateway** -- CLI with `clap` + `reedline`, skin engine port, gateway platform adapters, session persistence
+4. **CLI + Gateway** -- CLI with `clap` + `reedline`, skin engine port, Telegram adapter, API server, session persistence
 5. **Testing + Migration** -- Port or rewrite test suite, configuration migration from Python format, parallel deployment for A/B validation
 
 ### Preliminary Rust Crate Mapping
@@ -419,33 +320,31 @@ Full Python-to-Rust rewrite of the Hermes Agent codebase for improved performanc
 ## Dependency Graph
 
 ```
-Phase 1: Deep Research
+Phase 1: Simplification Refactor  <-- FIRST: clean the surface
+    |   <-- removes ~30,000 lines of niche/dead code
+    |   <-- reduces gateway to Telegram + API server
+    |   <-- consolidates memory plugins to Honcho only
+    |   <-- strips skills to local-only
+    v
+Phase 2: Unified Knowledge Base
+    |   <-- filesystem-first: directories of markdown + FTS5
+    |   <-- no sqlite-vec, no embeddings, no tiered context
+    |   <-- X bookmarks as one source (read from SQLite, write markdown)
+    v
+Phase 3: Deep Research Tool  --> feeds into Phase 2 (KB import)
     |
     v
-Phase 2: X Bookmarks  --+
-    |                    |
-    v                    v
-Phase 3: Knowledge Base and Memory Layer
-    |   <-- depends on data sources from Phase 2 (X bookmarks importer)
-    |   <-- informed by memory systems research (docs/to-study/)
-    |   <-- filesystem-first architecture: markdown files + SQLite index
-    |   <-- Honcho as optional reasoning layer, not storage layer
-    v
-Phase 4: Rust Port (Long-Term)  <-- targets final architecture from Phases 1-3
+Phase 4: Rust Port  <-- targets simplified architecture from Phases 1-3
 ```
 
-Phase 4's feasibility study can run in parallel with Phases 2-3 since it is purely research.
+Phase 1 can run immediately since it removes self-contained subsystems. Phase 3's feasibility study can run in parallel with Phase 2.
 
 ## References
 
 - `docs/to-study/about-memory-systems.md` -- curated list of articles and repos on agent memory systems
-- `docs/deep-research-plan.md` -- Phase 1 implementation plan
+- `docs/deep-research-plan.md` -- Phase 3 implementation plan
 - `docs/honcho-integration-spec.md` -- existing Honcho integration architecture and patterns
 - `plugins/memory/honcho/` -- existing Honcho memory provider plugin (client, session, CLI)
-- `docs/migration/openclaw.md` -- OpenClaw migration guide
 - [Mintlify: How we built a virtual filesystem for our Assistant](https://www.mintlify.com/blog/how-we-built-a-virtual-filesystem-for-our-assistant) -- ChromaFs pattern: virtual filesystem over indexed data
 - [arXiv 2601.11672: From Everything-is-a-File to Files-Are-All-You-Need](https://arxiv.org/abs/2601.11672) -- Unix philosophy applied to agentic AI design
-- [sqlite-vec](https://github.com/asg017/sqlite-vec) -- vector search extension for SQLite
 - [Honcho](https://github.com/plastic-labs/honcho) -- memory library with dialectical reasoning
-- [OpenViking](https://github.com/volcengine/OpenViking) -- context database with tiered L0/L1/L2 and filesystem paradigm
-- [mem0](https://github.com/mem0ai/mem0) -- memory layer with graph-based approach
