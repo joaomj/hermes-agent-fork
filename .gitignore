@@ -32,6 +32,8 @@ data/*
 node_modules/
 browser-use/
 agent-browser/
+.ruff_cache/
+
 # Private keys
 *.ppk
 *.pem
