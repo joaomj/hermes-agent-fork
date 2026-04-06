@@ -160,7 +160,6 @@ def build_tool_preview(
         "browser_click": "ref",
         "browser_type": "text",
         "image_generate": "prompt",
-        "text_to_speech": "text",
         "vision_analyze": "question",
         "skill_view": "name",
         "skills_list": "category",
@@ -1082,8 +1081,6 @@ def get_cute_tool_message(
         return _wrap(f"┊ 📚 skill     {_trunc(args.get('name', ''), 30)}  {dur}")
     if tool_name == "image_generate":
         return _wrap(f"┊ 🎨 create    {_trunc(args.get('prompt', ''), 35)}  {dur}")
-    if tool_name == "text_to_speech":
-        return _wrap(f"┊ 🔊 speak     {_trunc(args.get('text', ''), 30)}  {dur}")
     if tool_name == "vision_analyze":
         return _wrap(f"┊ 👁️  vision    {_trunc(args.get('question', ''), 30)}  {dur}")
     if tool_name == "send_message":
