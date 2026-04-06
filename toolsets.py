@@ -156,11 +156,6 @@ TOOLSETS = {
         "tools": ["read_file", "write_file", "patch", "search_files"],
         "includes": [],
     },
-    "tts": {
-        "description": "Text-to-speech: convert text to audio with Edge TTS (free), ElevenLabs, or OpenAI",
-        "tools": ["text_to_speech"],
-        "includes": [],
-    },
     "todo": {
         "description": "Task planning and tracking for multi-step work",
         "tools": ["todo"],
