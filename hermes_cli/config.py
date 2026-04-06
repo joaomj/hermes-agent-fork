@@ -246,9 +246,6 @@ DEFAULT_CONFIG = {
         "env_passthrough": [],
         "docker_image": "nikolaik/python-nodejs:python3.11-nodejs20",
         "docker_forward_env": [],
-        "singularity_image": "docker://nikolaik/python-nodejs:python3.11-nodejs20",
-        "modal_image": "nikolaik/python-nodejs:python3.11-nodejs20",
-        "daytona_image": "nikolaik/python-nodejs:python3.11-nodejs20",
         # Container resource limits (docker, singularity, modal, daytona — ignored for local/ssh)
         "container_cpu": 1,
         "container_memory": 5120,  # MB (default 5GB)
@@ -389,46 +386,6 @@ DEFAULT_CONFIG = {
     "privacy": {
         "redact_pii": False,  # When True, hash user IDs and strip phone numbers from LLM context
     },
-    # Text-to-speech configuration
-    "tts": {
-        "provider": "edge",  # "edge" (free) | "elevenlabs" (premium) | "openai" | "neutts" (local)
-        "edge": {
-            "voice": "en-US-AriaNeural",
-            # Popular: AriaNeural, JennyNeural, AndrewNeural, BrianNeural, SoniaNeural
-        },
-        "elevenlabs": {
-            "voice_id": "pNInz6obpgDQGcFmaJgB",  # Adam
-            "model_id": "eleven_multilingual_v2",
-        },
-        "openai": {
-            "model": "gpt-4o-mini-tts",
-            "voice": "alloy",
-            # Voices: alloy, echo, fable, onyx, nova, shimmer
-        },
-        "neutts": {
-            "ref_audio": "",  # Path to reference voice audio (empty = bundled default)
-            "ref_text": "",  # Path to reference voice transcript (empty = bundled default)
-            "model": "neuphonic/neutts-air-q4-gguf",  # HuggingFace model repo
-            "device": "cpu",  # cpu, cuda, or mps
-        },
-    },
-    "stt": {
-        "enabled": True,
-        "provider": "local",  # "local" (free, faster-whisper) | "groq" | "openai" (Whisper API)
-        "local": {
-            "model": "base",  # tiny, base, small, medium, large-v3
-        },
-        "openai": {
-            "model": "whisper-1",  # whisper-1, gpt-4o-mini-transcribe, gpt-4o-transcribe
-        },
-    },
-    "voice": {
-        "record_key": "ctrl+b",
-        "max_recording_seconds": 120,
-        "auto_tts": False,
-        "silence_threshold": 200,  # RMS below this = silence (0-32767)
-        "silence_duration": 3.0,  # Seconds of silence before auto-stop
-    },
     "human_delay": {
         "mode": "off",
         "min_ms": 800,
@@ -540,7 +497,7 @@ ENV_VARS_BY_VERSION: Dict[int, List[str]] = {
         "BROWSERBASE_PROJECT_ID",
         "FAL_KEY",
     ],
-    4: ["VOICE_TOOLS_OPENAI_KEY", "ELEVENLABS_API_KEY"],
+    4: [],
     5: [
         "WHATSAPP_ENABLED",
         "WHATSAPP_MODE",
@@ -861,21 +818,6 @@ OPTIONAL_ENV_VARS = {
         "prompt": "WandB API key",
         "url": "https://wandb.ai/authorize",
         "tools": ["rl_get_results", "rl_check_status"],
-        "password": True,
-        "category": "tool",
-    },
-    "VOICE_TOOLS_OPENAI_KEY": {
-        "description": "OpenAI API key for voice transcription (Whisper) and OpenAI TTS",
-        "prompt": "OpenAI API Key (for Whisper STT + TTS)",
-        "url": "https://platform.openai.com/api-keys",
-        "tools": ["voice_transcription", "openai_tts"],
-        "password": True,
-        "category": "tool",
-    },
-    "ELEVENLABS_API_KEY": {
-        "description": "ElevenLabs API key for premium text-to-speech voices",
-        "prompt": "ElevenLabs API key",
-        "url": "https://elevenlabs.io/",
         "password": True,
         "category": "tool",
     },
@@ -1924,7 +1866,6 @@ def show_config():
 
     keys = [
         ("OPENROUTER_API_KEY", "OpenRouter"),
-        ("VOICE_TOOLS_OPENAI_KEY", "OpenAI (STT/TTS)"),
         ("EXA_API_KEY", "Exa"),
         ("PARALLEL_API_KEY", "Parallel"),
         ("FIRECRAWL_API_KEY", "Firecrawl"),
@@ -1972,10 +1913,6 @@ def show_config():
         print(
             f"  Docker image: {terminal.get('docker_image', 'nikolaik/python-nodejs:python3.11-nodejs20')}"
         )
-    elif terminal.get("backend") == "singularity":
-        print(
-            f"  Image:        {terminal.get('singularity_image', 'docker://nikolaik/python-nodejs:python3.11-nodejs20')}"
-        )
     elif terminal.get("backend") == "modal":
         print(
             f"  Modal image:  {terminal.get('modal_image', 'nikolaik/python-nodejs:python3.11-nodejs20')}"
@@ -1983,9 +1920,6 @@ def show_config():
         modal_token = get_env_value("MODAL_TOKEN_ID")
         print(f"  Modal token:  {'configured' if modal_token else '(not set)'}")
     elif terminal.get("backend") == "daytona":
-        print(
-            f"  Daytona image: {terminal.get('daytona_image', 'nikolaik/python-nodejs:python3.11-nodejs20')}"
-        )
         daytona_key = get_env_value("DAYTONA_API_KEY")
         print(f"  API key:      {'configured' if daytona_key else '(not set)'}")
     elif terminal.get("backend") == "ssh":
@@ -2108,7 +2042,6 @@ def set_config_value(key: str, value: str):
         "OPENROUTER_API_KEY",
         "OPENAI_API_KEY",
         "ANTHROPIC_API_KEY",
-        "VOICE_TOOLS_OPENAI_KEY",
         "EXA_API_KEY",
         "PARALLEL_API_KEY",
         "FIRECRAWL_API_KEY",
@@ -2190,9 +2123,7 @@ def set_config_value(key: str, value: str):
         "terminal.backend": "TERMINAL_ENV",
         "terminal.modal_mode": "TERMINAL_MODAL_MODE",
         "terminal.docker_image": "TERMINAL_DOCKER_IMAGE",
-        "terminal.singularity_image": "TERMINAL_SINGULARITY_IMAGE",
         "terminal.modal_image": "TERMINAL_MODAL_IMAGE",
-        "terminal.daytona_image": "TERMINAL_DAYTONA_IMAGE",
         "terminal.docker_mount_cwd_to_workspace": "TERMINAL_DOCKER_MOUNT_CWD_TO_WORKSPACE",
         "terminal.cwd": "TERMINAL_CWD",
         "terminal.timeout": "TERMINAL_TIMEOUT",

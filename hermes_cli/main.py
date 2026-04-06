@@ -962,7 +962,6 @@ def select_provider_and_model(args=None):
 
     provider_labels = {
         "openrouter": "OpenRouter",
-        "nous": "Nous Portal",
         "openai-codex": "OpenAI Codex",
         "copilot-acp": "GitHub Copilot ACP",
         "copilot": "GitHub Copilot",
@@ -989,7 +988,6 @@ def select_provider_and_model(args=None):
     # Step 1: Provider selection — put active provider first with marker
     providers = [
         ("openrouter", "OpenRouter (100+ models, pay-per-use)"),
-        ("nous", "Nous Portal (Nous Research subscription)"),
         ("openai-codex", "OpenAI Codex"),
         ("copilot-acp", "GitHub Copilot ACP (spawns `copilot --acp --stdio`)"),
         ("copilot", "GitHub Copilot (uses GITHUB_TOKEN or gh auth token)"),
@@ -1060,8 +1058,6 @@ def select_provider_and_model(args=None):
     # Step 2: Provider-specific setup + model selection
     if selected_provider == "openrouter":
         _model_flow_openrouter(config, current_model)
-    elif selected_provider == "nous":
-        _model_flow_nous(config, current_model, args=args)
     elif selected_provider == "openai-codex":
         _model_flow_openai_codex(config, current_model)
     elif selected_provider == "copilot-acp":
@@ -1186,136 +1182,6 @@ def _model_flow_openrouter(config, current_model=""):
         save_config(cfg)
         deactivate_provider()
         print(f"Default model set to: {selected} (via OpenRouter)")
-    else:
-        print("No change.")
-
-
-def _model_flow_nous(config, current_model="", args=None):
-    """Nous Portal provider: ensure logged in, then pick model."""
-    from hermes_cli.auth import (
-        get_provider_auth_state,
-        _prompt_model_selection,
-        _save_model_choice,
-        _update_config_for_provider,
-        resolve_nous_runtime_credentials,
-        fetch_nous_models,
-        AuthError,
-        format_auth_error,
-        _login_nous,
-        PROVIDER_REGISTRY,
-    )
-    from hermes_cli.config import get_env_value, save_config, save_env_value
-    from hermes_cli.nous_subscription import (
-        apply_nous_provider_defaults,
-        get_nous_subscription_explainer_lines,
-    )
-    import argparse
-
-    state = get_provider_auth_state("nous")
-    if not state or not state.get("access_token"):
-        print("Not logged into Nous Portal. Starting login...")
-        print()
-        try:
-            mock_args = argparse.Namespace(
-                portal_url=getattr(args, "portal_url", None),
-                inference_url=getattr(args, "inference_url", None),
-                client_id=getattr(args, "client_id", None),
-                scope=getattr(args, "scope", None),
-                no_browser=bool(getattr(args, "no_browser", False)),
-                timeout=getattr(args, "timeout", None) or 15.0,
-                ca_bundle=getattr(args, "ca_bundle", None),
-                insecure=bool(getattr(args, "insecure", False)),
-            )
-            _login_nous(mock_args, PROVIDER_REGISTRY["nous"])
-            print()
-            for line in get_nous_subscription_explainer_lines():
-                print(line)
-        except SystemExit:
-            print("Login cancelled or failed.")
-            return
-        except Exception as exc:
-            print(f"Login failed: {exc}")
-            return
-        # login_nous already handles model selection + config update
-        return
-
-    # Already logged in — use curated model list (same as OpenRouter defaults).
-    # The live /models endpoint returns hundreds of models; the curated list
-    # shows only agentic models users recognize from OpenRouter.
-    from hermes_cli.models import _PROVIDER_MODELS
-
-    model_ids = _PROVIDER_MODELS.get("nous", [])
-    if not model_ids:
-        print("No curated models available for Nous Portal.")
-        return
-
-    print(
-        f'Showing {len(model_ids)} curated models — use "Enter custom model name" for others.'
-    )
-
-    # Verify credentials are still valid (catches expired sessions early)
-    try:
-        creds = resolve_nous_runtime_credentials(min_key_ttl_seconds=5 * 60)
-    except Exception as exc:
-        relogin = isinstance(exc, AuthError) and exc.relogin_required
-        msg = format_auth_error(exc) if isinstance(exc, AuthError) else str(exc)
-        if relogin:
-            print(f"Session expired: {msg}")
-            print("Re-authenticating with Nous Portal...\n")
-            try:
-                mock_args = argparse.Namespace(
-                    portal_url=None,
-                    inference_url=None,
-                    client_id=None,
-                    scope=None,
-                    no_browser=False,
-                    timeout=15.0,
-                    ca_bundle=None,
-                    insecure=False,
-                )
-                _login_nous(mock_args, PROVIDER_REGISTRY["nous"])
-            except Exception as login_exc:
-                print(f"Re-login failed: {login_exc}")
-            return
-        print(f"Could not verify credentials: {msg}")
-        return
-
-    selected = _prompt_model_selection(model_ids, current_model=current_model)
-    if selected:
-        _save_model_choice(selected)
-        # Reactivate Nous as the provider and update config
-        inference_url = creds.get("base_url", "")
-        _update_config_for_provider("nous", inference_url)
-        current_model_cfg = config.get("model")
-        if isinstance(current_model_cfg, dict):
-            model_cfg = dict(current_model_cfg)
-        elif isinstance(current_model_cfg, str) and current_model_cfg.strip():
-            model_cfg = {"default": current_model_cfg.strip()}
-        else:
-            model_cfg = {}
-        model_cfg["provider"] = "nous"
-        model_cfg["default"] = selected
-        if inference_url and inference_url.strip():
-            model_cfg["base_url"] = inference_url.rstrip("/")
-        else:
-            model_cfg.pop("base_url", None)
-        config["model"] = model_cfg
-        # Clear any custom endpoint that might conflict
-        if get_env_value("OPENAI_BASE_URL"):
-            save_env_value("OPENAI_BASE_URL", "")
-            save_env_value("OPENAI_API_KEY", "")
-        changed_defaults = apply_nous_provider_defaults(config)
-        save_config(config)
-        print(f"Default model set to: {selected} (via Nous Portal)")
-        if "tts" in changed_defaults:
-            print("TTS provider set to: OpenAI TTS via your Nous subscription")
-        else:
-            current_tts = str(config.get("tts", {}).get("provider") or "edge")
-            if current_tts.lower() not in {"", "edge"}:
-                print(f"Keeping your existing TTS provider: {current_tts}")
-        print()
-        for line in get_nous_subscription_explainer_lines():
-            print(line)
     else:
         print("No change.")
 
@@ -4482,7 +4348,6 @@ For more help on a command:
         choices=[
             "auto",
             "openrouter",
-            "nous",
             "openai-codex",
             "copilot-acp",
             "copilot",
@@ -4753,9 +4618,9 @@ For more help on a command:
     )
     login_parser.add_argument(
         "--provider",
-        choices=["nous", "openai-codex"],
+        choices=["openai-codex"],
         default=None,
-        help="Provider to authenticate with (default: nous)",
+        help="Provider to authenticate with",
     )
     login_parser.add_argument(
         "--portal-url", help="Portal base URL (default: production portal)"
@@ -4799,7 +4664,7 @@ For more help on a command:
     )
     logout_parser.add_argument(
         "--provider",
-        choices=["nous", "openai-codex"],
+        choices=["openai-codex"],
         default=None,
         help="Provider to log out from (default: active provider)",
     )
@@ -5120,57 +4985,6 @@ For more help on a command:
 
     # =========================================================================
     # plugins command
-    # =========================================================================
-    plugins_parser = subparsers.add_parser(
-        "plugins",
-        help="Manage plugins — install, update, remove, list",
-        description="Install plugins from Git repositories, update, remove, or list them.",
-    )
-    plugins_subparsers = plugins_parser.add_subparsers(dest="plugins_action")
-
-    plugins_install = plugins_subparsers.add_parser(
-        "install", help="Install a plugin from a Git URL or owner/repo"
-    )
-    plugins_install.add_argument(
-        "identifier",
-        help="Git URL or owner/repo shorthand (e.g. anpicasso/hermes-plugin-chrome-profiles)",
-    )
-    plugins_install.add_argument(
-        "--force",
-        "-f",
-        action="store_true",
-        help="Remove existing plugin and reinstall",
-    )
-
-    plugins_update = plugins_subparsers.add_parser(
-        "update", help="Pull latest changes for an installed plugin"
-    )
-    plugins_update.add_argument("name", help="Plugin name to update")
-
-    plugins_remove = plugins_subparsers.add_parser(
-        "remove", aliases=["rm", "uninstall"], help="Remove an installed plugin"
-    )
-    plugins_remove.add_argument("name", help="Plugin directory name to remove")
-
-    plugins_subparsers.add_parser("list", aliases=["ls"], help="List installed plugins")
-
-    plugins_enable = plugins_subparsers.add_parser(
-        "enable", help="Enable a disabled plugin"
-    )
-    plugins_enable.add_argument("name", help="Plugin name to enable")
-
-    plugins_disable = plugins_subparsers.add_parser(
-        "disable", help="Disable a plugin without removing it"
-    )
-    plugins_disable.add_argument("name", help="Plugin name to disable")
-
-    def cmd_plugins(args):
-        from hermes_cli.plugins_cmd import plugins_command
-
-        plugins_command(args)
-
-    plugins_parser.set_defaults(func=cmd_plugins)
-
     # =========================================================================
     # honcho command — Honcho-specific config (peer, mode, tokens, profiles)
     # Provider selection happens via 'hermes memory setup'.
