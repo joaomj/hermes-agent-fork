@@ -384,3 +384,227 @@ These failures exist in the baseline and are unrelated to simplification:
 | Total Python lines removed | -- | ~30,000+ |
 | Static assets removed | -- | ~3.7MB |
 | Gateway platform adapters | 15 | 2 (Telegram + API server) |
+
+---
+
+## Phase 1 Completion Plan (Missing Roadmap Work)
+
+Status: PLANNED
+
+This section appends the remaining roadmap work after Step 1f, with an explicit
+voice-removal requirement: no voice-related feature is kept.
+
+### Step 0: Baseline Freeze (before new changes)
+
+**Status:** PLANNED
+
+Capture current red tests so later gates only fail on newly introduced regressions.
+
+**Gate command**
+
+```bash
+source venv/bin/activate
+python -m pytest tests/ -q --ignore=tests/acp/ -x
+```
+
+**Deliverable**
+
+- Baseline failure list recorded in this file before Step 1g edits.
+
+---
+
+## Step 1g: Remove Voice Features + Finish 1.5 Leftovers
+
+**Status:** PLANNED
+
+### Scope
+
+Remove all voice-related functionality and complete the missing 1.5 items.
+
+### Remove
+
+| Remove | Notes |
+|--------|-------|
+| `tools/voice_mode.py` | CLI push-to-talk voice mode |
+| `tools/tts_tool.py` | Text-to-speech tool |
+| `tools/neutts_synth.py` | NeuTTS subprocess helper |
+| `tools/transcription_tools.py` | STT/transcription pipeline |
+| `tools/browser_camofox.py` | Camofox backend (roadmap 1.5 leftover) |
+| `tools/browser_camofox_state.py` | Camofox state helper |
+
+### Update
+
+| File | Change |
+|------|--------|
+| `model_tools.py` | Remove `tools.tts_tool` discovery and `tts_tools` legacy alias |
+| `toolsets.py` | Remove `tts` toolset and any camofox-specific references |
+| `hermes_cli/commands.py` | Remove `/voice` command registration |
+| `cli.py` | Remove `/voice` dispatch and CLI voice/TTS runtime paths |
+| `gateway/run.py` | Remove `/voice` command handling, auto-voice-reply mode state, and STT enrichment flow |
+| `hermes_cli/config.py` | Remove `tts`, `stt`, and `voice` config sections and related env metadata |
+| `hermes_cli/setup.py` | Remove TTS/voice setup flows |
+| `tools/browser_tool.py` | Remove camofox mode branching |
+| `gateway/platforms/base.py` and `gateway/platforms/telegram.py` | Keep generic audio media support where needed, remove voice-only directives and coupling |
+
+### Test updates/removals
+
+| Test file | Action |
+|-----------|--------|
+| `tests/tools/test_voice_mode.py` | Remove |
+| `tests/tools/test_voice_cli_integration.py` | Remove |
+| `tests/tools/test_transcription.py` | Remove |
+| `tests/tools/test_transcription_tools.py` | Remove |
+| `tests/gateway/test_stt_config.py` | Remove/update for STT removal |
+| `tests/hermes_cli/test_commands.py` | Remove `/voice` assertions |
+
+### Gate command
+
+```bash
+source venv/bin/activate
+python -m pytest tests/gateway/ tests/tools/ tests/hermes_cli/ -q
+```
+
+---
+
+## Step 1h: Consolidate Config Loaders (Roadmap 1.7 item 1)
+
+**Status:** PLANNED
+
+### Scope
+
+Consolidate the three config-loading paths into one shared runtime loader while
+preserving behavior:
+
+- `cli.py::load_cli_config()`
+- `hermes_cli/config.py::load_config()`
+- `gateway/run.py` YAML/env bridge logic
+
+### Implementation direction
+
+- Add shared loader/bridge helpers in `hermes_cli/` (single canonical merge + env-bridge behavior).
+- Keep thin compatibility wrappers in current call sites.
+- Migrate callers incrementally to reduce risk.
+
+### Gate command
+
+```bash
+source venv/bin/activate
+python -m pytest \
+  tests/test_cli_init.py \
+  tests/test_cli_save_config_value.py \
+  tests/test_config_env_expansion.py \
+  tests/test_auxiliary_config_bridge.py \
+  tests/gateway/test_config.py \
+  tests/gateway/test_config_cwd_bridge.py -q
+```
+
+---
+
+## Step 1i: Remove Nous-Specific Routing (Roadmap 1.7 item 2)
+
+**Status:** PLANNED
+
+### Scope
+
+Remove vendor-specific routing surfaces while preserving general provider logic.
+
+### Remove
+
+| Remove | Notes |
+|--------|-------|
+| `tools/managed_tool_gateway.py` | Nous-managed gateway helper |
+| `hermes_cli/nous_subscription.py` | Nous subscription feature routing |
+
+### Update (expected)
+
+| Area | Change |
+|------|--------|
+| Tool backends | Remove managed Nous gateway branches from web/image/browser/modal/audio paths |
+| Prompting | Remove Nous subscription prompt block wiring |
+| CLI setup/status | Remove Nous subscription explainer and feature-state rendering |
+| Tests | Remove/replace Nous-managed gateway test coverage with provider-agnostic behavior tests |
+
+### Gate command
+
+```bash
+source venv/bin/activate
+python -m pytest tests/tools/ tests/hermes_cli/ tests/test_run_agent.py -q
+```
+
+---
+
+## Step 1j: Merge Plugin Management Files (Roadmap 1.7 item 3)
+
+**Status:** PLANNED
+
+### Scope
+
+Merge responsibilities currently split across:
+
+- `hermes_cli/plugins.py`
+- `hermes_cli/plugins_cmd.py`
+
+### Implementation direction
+
+- Keep one canonical plugin module for discovery + command operations.
+- Keep temporary import compatibility where needed to avoid breakage during transition.
+
+### Gate command
+
+```bash
+source venv/bin/activate
+python -m pytest tests/test_plugins.py tests/test_plugins_cmd.py tests/agent/test_memory_plugin_e2e.py -q
+```
+
+---
+
+## Step 1k: Remove Niche Terminal Environments (Roadmap 1.7 item 4)
+
+**Status:** PLANNED
+
+### Remove
+
+| Remove | Notes |
+|--------|-------|
+| `tools/environments/daytona.py` | Niche backend |
+| `tools/environments/singularity.py` | Niche backend |
+
+### Update
+
+| File/Area | Change |
+|-----------|--------|
+| `tools/terminal_tool.py` | Remove daytona/singularity backend paths and validations |
+| `cli.py`, `gateway/run.py`, `hermes_cli/config.py` | Remove daytona/singularity config mappings/env bridges |
+| `pyproject.toml` | Remove daytona-related optional extras |
+| Tests | Remove/update daytona/singularity-specific tests and references |
+
+### Gate command
+
+```bash
+source venv/bin/activate
+python -m pytest tests/tools/ tests/hermes_cli/ -q
+```
+
+---
+
+## Step 1l: Final Verification and Roadmap Alignment
+
+**Status:** PLANNED
+
+### Deliverables
+
+- Update this file with actual results for Steps 1g-1k.
+- Update `docs/roadmap.md` Phase 1 status from planning to completed (or in-progress with exact remaining items).
+- Record net line-count and artifact reductions after final gate.
+
+### Final gate command
+
+```bash
+source venv/bin/activate
+python -m pytest tests/ -q --ignore=tests/acp/ -x
+```
+
+### Commit policy for this phase
+
+- Commit after each step gate passes.
+- No push unless explicitly requested.
