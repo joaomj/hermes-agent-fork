@@ -142,7 +142,6 @@ def _discover_tools():
         "tools.terminal_tool",
         "tools.file_tools",
         "tools.vision_tools",
-        "tools.mixture_of_agents_tool",
         "tools.image_generation_tool",
         "tools.skills_tool",
         "tools.skill_manager_tool",
@@ -209,7 +208,6 @@ _LEGACY_TOOLSET_MAP = {
     "web_tools": ["web_search", "web_extract"],
     "terminal_tools": ["terminal"],
     "vision_tools": ["vision_analyze"],
-    "moa_tools": ["mixture_of_agents"],
     "image_tools": ["image_generate"],
     "skills_tools": ["skills_list", "skill_view", "skill_manage"],
     "browser_tools": [

@@ -104,7 +104,6 @@ CONFIGURABLE_TOOLSETS = [
     ("code_execution", "⚡ Code Execution", "execute_code"),
     ("vision", "👁️  Vision / Image Analysis", "vision_analyze"),
     ("image_gen", "🎨 Image Generation", "image_generate"),
-    ("moa", "🧠 Mixture of Agents", "mixture_of_agents"),
     ("tts", "🔊 Text-to-Speech", "text_to_speech"),
     ("skills", "📚 Skills", "list, view, manage"),
     ("todo", "📋 Task Planning", "todo"),
@@ -124,7 +123,7 @@ CONFIGURABLE_TOOLSETS = [
 # Toolsets that are OFF by default for new installs.
 # They're still in _HERMES_CORE_TOOLS (available at runtime if enabled),
 # but the setup checklist won't pre-select them for first-time users.
-_DEFAULT_OFF_TOOLSETS = {"moa", "homeassistant", "rl"}
+_DEFAULT_OFF_TOOLSETS = {"homeassistant", "rl"}
 
 
 def _get_effective_configurable_toolsets():
@@ -421,10 +420,9 @@ TOOL_CATEGORIES = {
 }
 
 # Simple env-var requirements for toolsets NOT in TOOL_CATEGORIES.
-# Used as a fallback for tools like vision/moa that just need an API key.
+# Used as a fallback for tools like vision that just need an API key.
 TOOLSET_ENV_REQUIREMENTS = {
     "vision": [("OPENROUTER_API_KEY", "https://openrouter.ai/keys")],
-    "moa": [("OPENROUTER_API_KEY", "https://openrouter.ai/keys")],
 }
 
 
@@ -924,7 +922,7 @@ def _configure_toolset(ts_key: str, config: dict):
     if cat:
         _configure_tool_category(ts_key, cat, config)
     else:
-        # Simple fallback for vision, moa, etc.
+        # Simple fallback for toolsets with basic env-var requirements.
         _configure_simple_requirements(ts_key)
 
 

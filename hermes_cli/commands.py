@@ -194,13 +194,6 @@ COMMAND_REGISTRY: list[CommandDef] = [
     ),
     CommandDef("toolsets", "List available toolsets", "Tools & Skills", cli_only=True),
     CommandDef(
-        "skills",
-        "Search, install, inspect, or manage skills",
-        "Tools & Skills",
-        cli_only=True,
-        subcommands=("search", "browse", "inspect", "install"),
-    ),
-    CommandDef(
         "cron",
         "Manage scheduled tasks",
         "Tools & Skills",
@@ -549,7 +542,7 @@ def telegram_menu_commands(
       3. Built-in skill commands (fill remaining slots, alphabetical)
 
     Skills are the only tier that gets trimmed when the cap is hit.
-    User-installed hub skills are excluded — accessible via /skills.
+    Hub-installed skills are excluded from Telegram menus.
     Skills disabled for the ``"telegram"`` platform (via ``hermes skills
     config``) are excluded from the menu entirely.
 

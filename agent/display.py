@@ -33,8 +33,10 @@ _MAX_INLINE_DIFF_LINES = 80
 @dataclass
 class LocalEditSnapshot:
     """Pre-tool filesystem snapshot used to render diffs locally after writes."""
+
     paths: list[Path] = field(default_factory=list)
     before: dict[str, str | None] = field(default_factory=dict)
+
 
 # =========================================================================
 # Configurable tool preview length (0 = no limit)
@@ -58,10 +60,12 @@ def get_tool_preview_max_len() -> int:
 # Skin-aware helpers (lazy import to avoid circular deps)
 # =========================================================================
 
+
 def _get_skin():
     """Get the active skin config, or None if not available."""
     try:
         from hermes_cli.skin_engine import get_active_skin
+
         return get_active_skin()
     except Exception:
         return None
@@ -112,6 +116,7 @@ def get_tool_emoji(tool_name: str, default: str = "⚡") -> str:
     # 2. Registry default
     try:
         from tools.registry import registry
+
         emoji = registry.get_emoji(tool_name, default="")
         if emoji:
             return emoji
@@ -125,12 +130,15 @@ def get_tool_emoji(tool_name: str, default: str = "⚡") -> str:
 # Tool preview (one-line summary of a tool call's primary argument)
 # =========================================================================
 
+
 def _oneline(text: str) -> str:
     """Collapse whitespace (including newlines) to single spaces."""
     return " ".join(text.split())
 
 
-def build_tool_preview(tool_name: str, args: dict, max_len: int | None = None) -> str | None:
+def build_tool_preview(
+    tool_name: str, args: dict, max_len: int | None = None
+) -> str | None:
     """Build a short preview of a tool call's primary argument for display.
 
     *max_len* controls truncation.  ``None`` (default) defers to the global
@@ -141,16 +149,26 @@ def build_tool_preview(tool_name: str, args: dict, max_len: int | None = None) -
     if not args:
         return None
     primary_args = {
-        "terminal": "command", "web_search": "query", "web_extract": "urls",
-        "read_file": "path", "write_file": "path", "patch": "path",
-        "search_files": "pattern", "browser_navigate": "url",
-        "browser_click": "ref", "browser_type": "text",
-        "image_generate": "prompt", "text_to_speech": "text",
-        "vision_analyze": "question", "mixture_of_agents": "user_prompt",
-        "skill_view": "name", "skills_list": "category",
+        "terminal": "command",
+        "web_search": "query",
+        "web_extract": "urls",
+        "read_file": "path",
+        "write_file": "path",
+        "patch": "path",
+        "search_files": "pattern",
+        "browser_navigate": "url",
+        "browser_click": "ref",
+        "browser_type": "text",
+        "image_generate": "prompt",
+        "text_to_speech": "text",
+        "vision_analyze": "question",
+        "skill_view": "name",
+        "skills_list": "category",
         "cronjob": "action",
-        "execute_code": "code", "delegate_task": "goal",
-        "clarify": "question", "skill_manage": "name",
+        "execute_code": "code",
+        "delegate_task": "goal",
+        "clarify": "question",
+        "skill_manage": "name",
     }
 
     if tool_name == "process":
@@ -179,18 +197,18 @@ def build_tool_preview(tool_name: str, args: dict, max_len: int | None = None) -
 
     if tool_name == "session_search":
         query = _oneline(args.get("query", ""))
-        return f"recall: \"{query[:25]}{'...' if len(query) > 25 else ''}\""
+        return f'recall: "{query[:25]}{"..." if len(query) > 25 else ""}"'
 
     if tool_name == "memory":
         action = args.get("action", "")
         target = args.get("target", "")
         if action == "add":
             content = _oneline(args.get("content", ""))
-            return f"+{target}: \"{content[:25]}{'...' if len(content) > 25 else ''}\""
+            return f'+{target}: "{content[:25]}{"..." if len(content) > 25 else ""}"'
         elif action == "replace":
-            return f"~{target}: \"{_oneline(args.get('old_text', '')[:20])}\""
+            return f'~{target}: "{_oneline(args.get("old_text", "")[:20])}"'
         elif action == "remove":
-            return f"-{target}: \"{_oneline(args.get('old_text', '')[:20])}\""
+            return f'-{target}: "{_oneline(args.get("old_text", "")[:20])}"'
         return action
 
     if tool_name == "send_message":
@@ -198,7 +216,7 @@ def build_tool_preview(tool_name: str, args: dict, max_len: int | None = None) -
         msg = _oneline(args.get("message", ""))
         if len(msg) > 20:
             msg = msg[:17] + "..."
-        return f"to {target}: \"{msg}\""
+        return f'to {target}: "{msg}"'
 
     if tool_name.startswith("rl_"):
         rl_previews = {
@@ -217,7 +235,16 @@ def build_tool_preview(tool_name: str, args: dict, max_len: int | None = None) -
 
     key = primary_args.get(tool_name)
     if not key:
-        for fallback_key in ("query", "text", "command", "path", "name", "prompt", "code", "goal"):
+        for fallback_key in (
+            "query",
+            "text",
+            "command",
+            "path",
+            "name",
+            "prompt",
+            "code",
+            "goal",
+        ):
             if fallback_key in args:
                 key = fallback_key
                 break
@@ -233,13 +260,14 @@ def build_tool_preview(tool_name: str, args: dict, max_len: int | None = None) -
     if not preview:
         return None
     if max_len > 0 and len(preview) > max_len:
-        preview = preview[:max_len - 3] + "..."
+        preview = preview[: max_len - 3] + "..."
     return preview
 
 
 # =========================================================================
 # Inline diff previews for write actions
 # =========================================================================
+
 
 def _resolved_path(path: str) -> Path:
     """Resolve a possibly-relative filesystem path against the current cwd."""
@@ -314,7 +342,9 @@ def _resolve_local_edit_paths(tool_name: str, function_args: dict | None) -> lis
     return []
 
 
-def capture_local_edit_snapshot(tool_name: str, function_args: dict | None) -> LocalEditSnapshot | None:
+def capture_local_edit_snapshot(
+    tool_name: str, function_args: dict | None
+) -> LocalEditSnapshot | None:
     """Capture before-state for local write previews."""
     paths = _resolve_local_edit_paths(tool_name, function_args)
     if not paths:
@@ -423,7 +453,9 @@ def _render_inline_unified_diff(diff: str) -> list[str]:
         if raw_line.startswith("+++ "):
             to_file = raw_line[4:].strip()
             if from_file or to_file:
-                rendered.append(f"{_ANSI_FILE}{from_file or 'a/?'} → {to_file or 'b/?'}{_ANSI_RESET}")
+                rendered.append(
+                    f"{_ANSI_FILE}{from_file or 'a/?'} → {to_file or 'b/?'}{_ANSI_RESET}"
+                )
             continue
         if raw_line.startswith("@@"):
             rendered.append(f"{_ANSI_HUNK}{raw_line}{_ANSI_RESET}")
@@ -493,7 +525,7 @@ def _summarize_rendered_diff_sections(
         rendered.extend(section_lines[:remaining_budget])
         omitted_lines += len(section_lines) - remaining_budget
         omitted_files += 1 + max(0, len(sections) - idx - 1)
-        for leftover in sections[idx + 1:]:
+        for leftover in sections[idx + 1 :]:
             omitted_lines += len(_render_inline_unified_diff(leftover))
         break
 
@@ -535,41 +567,74 @@ def render_edit_diff_with_delta(
 # KawaiiSpinner
 # =========================================================================
 
+
 class KawaiiSpinner:
     """Animated spinner with kawaii faces for CLI feedback during tool execution."""
 
     SPINNERS = {
-        'dots': ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'],
-        'bounce': ['⠁', '⠂', '⠄', '⡀', '⢀', '⠠', '⠐', '⠈'],
-        'grow': ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█', '▇', '▆', '▅', '▄', '▃', '▂'],
-        'arrows': ['←', '↖', '↑', '↗', '→', '↘', '↓', '↙'],
-        'star': ['✶', '✷', '✸', '✹', '✺', '✹', '✸', '✷'],
-        'moon': ['🌑', '🌒', '🌓', '🌔', '🌕', '🌖', '🌗', '🌘'],
-        'pulse': ['◜', '◠', '◝', '◞', '◡', '◟'],
-        'brain': ['🧠', '💭', '💡', '✨', '💫', '🌟', '💡', '💭'],
-        'sparkle': ['⁺', '˚', '*', '✧', '✦', '✧', '*', '˚'],
+        "dots": ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"],
+        "bounce": ["⠁", "⠂", "⠄", "⡀", "⢀", "⠠", "⠐", "⠈"],
+        "grow": ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█", "▇", "▆", "▅", "▄", "▃", "▂"],
+        "arrows": ["←", "↖", "↑", "↗", "→", "↘", "↓", "↙"],
+        "star": ["✶", "✷", "✸", "✹", "✺", "✹", "✸", "✷"],
+        "moon": ["🌑", "🌒", "🌓", "🌔", "🌕", "🌖", "🌗", "🌘"],
+        "pulse": ["◜", "◠", "◝", "◞", "◡", "◟"],
+        "brain": ["🧠", "💭", "💡", "✨", "💫", "🌟", "💡", "💭"],
+        "sparkle": ["⁺", "˚", "*", "✧", "✦", "✧", "*", "˚"],
     }
 
     KAWAII_WAITING = [
-        "(｡◕‿◕｡)", "(◕‿◕✿)", "٩(◕‿◕｡)۶", "(✿◠‿◠)", "( ˘▽˘)っ",
-        "♪(´ε` )", "(◕ᴗ◕✿)", "ヾ(＾∇＾)", "(≧◡≦)", "(★ω★)",
+        "(｡◕‿◕｡)",
+        "(◕‿◕✿)",
+        "٩(◕‿◕｡)۶",
+        "(✿◠‿◠)",
+        "( ˘▽˘)っ",
+        "♪(´ε` )",
+        "(◕ᴗ◕✿)",
+        "ヾ(＾∇＾)",
+        "(≧◡≦)",
+        "(★ω★)",
     ]
 
     KAWAII_THINKING = [
-        "(｡•́︿•̀｡)", "(◔_◔)", "(¬‿¬)", "( •_•)>⌐■-■", "(⌐■_■)",
-        "(´･_･`)", "◉_◉", "(°ロ°)", "( ˘⌣˘)♡", "ヽ(>∀<☆)☆",
-        "٩(๑❛ᴗ❛๑)۶", "(⊙_⊙)", "(¬_¬)", "( ͡° ͜ʖ ͡°)", "ಠ_ಠ",
+        "(｡•́︿•̀｡)",
+        "(◔_◔)",
+        "(¬‿¬)",
+        "( •_•)>⌐■-■",
+        "(⌐■_■)",
+        "(´･_･`)",
+        "◉_◉",
+        "(°ロ°)",
+        "( ˘⌣˘)♡",
+        "ヽ(>∀<☆)☆",
+        "٩(๑❛ᴗ❛๑)۶",
+        "(⊙_⊙)",
+        "(¬_¬)",
+        "( ͡° ͜ʖ ͡°)",
+        "ಠ_ಠ",
     ]
 
     THINKING_VERBS = [
-        "pondering", "contemplating", "musing", "cogitating", "ruminating",
-        "deliberating", "mulling", "reflecting", "processing", "reasoning",
-        "analyzing", "computing", "synthesizing", "formulating", "brainstorming",
+        "pondering",
+        "contemplating",
+        "musing",
+        "cogitating",
+        "ruminating",
+        "deliberating",
+        "mulling",
+        "reflecting",
+        "processing",
+        "reasoning",
+        "analyzing",
+        "computing",
+        "synthesizing",
+        "formulating",
+        "brainstorming",
     ]
 
-    def __init__(self, message: str = "", spinner_type: str = 'dots', print_fn=None):
+    def __init__(self, message: str = "", spinner_type: str = "dots", print_fn=None):
         self.message = message
-        self.spinner_frames = self.SPINNERS.get(spinner_type, self.SPINNERS['dots'])
+        self.spinner_frames = self.SPINNERS.get(spinner_type, self.SPINNERS["dots"])
         self.running = False
         self.thread = None
         self.frame_idx = 0
@@ -583,7 +648,7 @@ class KawaiiSpinner:
         # child agents can replace sys.stdout with a black hole.
         self._out = sys.stdout
 
-    def _write(self, text: str, end: str = '\n', flush: bool = False):
+    def _write(self, text: str, end: str = "\n", flush: bool = False):
         """Write to the stdout captured at spinner creation time.
 
         If a print_fn was supplied at construction, all output is routed through
@@ -606,7 +671,7 @@ class KawaiiSpinner:
     def _is_tty(self) -> bool:
         """Check if output is a real terminal, safe against closed streams."""
         try:
-            return hasattr(self._out, 'isatty') and self._out.isatty()
+            return hasattr(self._out, "isatty") and self._out.isatty()
         except (ValueError, OSError):
             return False
 
@@ -622,6 +687,7 @@ class KawaiiSpinner:
         """
         try:
             from prompt_toolkit.patch_stdout import StdoutProxy
+
             return isinstance(self._out, StdoutProxy)
         except ImportError:
             return False
@@ -662,7 +728,7 @@ class KawaiiSpinner:
             else:
                 line = f"  {frame} {self.message} ({elapsed:.1f}s)"
             pad = max(self.last_line_len - len(line), 0)
-            self._write(f"\r{line}{' ' * pad}", end='', flush=True)
+            self._write(f"\r{line}{' ' * pad}", end="", flush=True)
             self.last_line_len = len(line)
             self.frame_idx += 1
             time.sleep(0.12)
@@ -693,7 +759,7 @@ class KawaiiSpinner:
         # Clear spinner line with spaces (not \033[K) to avoid garbled escape
         # codes when prompt_toolkit's patch_stdout is active — same approach
         # as stop(). Then print text; spinner redraws on next tick.
-        blanks = ' ' * max(self.last_line_len + 5, 40)
+        blanks = " " * max(self.last_line_len + 5, 40)
         self._write(f"\r{blanks}\r  {text}", flush=True)
 
     def stop(self, final_message: str = None):
@@ -705,10 +771,12 @@ class KawaiiSpinner:
         if is_tty:
             # Clear the spinner line with spaces instead of \033[K to avoid
             # garbled escape codes when prompt_toolkit's patch_stdout is active.
-            blanks = ' ' * max(self.last_line_len + 5, 40)
-            self._write(f"\r{blanks}\r", end='', flush=True)
+            blanks = " " * max(self.last_line_len + 5, 40)
+            self._write(f"\r{blanks}\r", end="", flush=True)
         if final_message:
-            elapsed = f" ({time.time() - self.start_time:.1f}s)" if self.start_time else ""
+            elapsed = (
+                f" ({time.time() - self.start_time:.1f}s)" if self.start_time else ""
+            )
             if is_tty:
                 self._write(f"  {final_message}", flush=True)
             else:
@@ -728,44 +796,117 @@ class KawaiiSpinner:
 # =========================================================================
 
 KAWAII_SEARCH = [
-    "♪(´ε` )", "(｡◕‿◕｡)", "ヾ(＾∇＾)", "(◕ᴗ◕✿)", "( ˘▽˘)っ",
-    "٩(◕‿◕｡)۶", "(✿◠‿◠)", "♪～(´ε｀ )", "(ノ´ヮ`)ノ*:・゚✧", "＼(◎o◎)／",
+    "♪(´ε` )",
+    "(｡◕‿◕｡)",
+    "ヾ(＾∇＾)",
+    "(◕ᴗ◕✿)",
+    "( ˘▽˘)っ",
+    "٩(◕‿◕｡)۶",
+    "(✿◠‿◠)",
+    "♪～(´ε｀ )",
+    "(ノ´ヮ`)ノ*:・゚✧",
+    "＼(◎o◎)／",
 ]
 KAWAII_READ = [
-    "φ(゜▽゜*)♪", "( ˘▽˘)っ", "(⌐■_■)", "٩(｡•́‿•̀｡)۶", "(◕‿◕✿)",
-    "ヾ(＠⌒ー⌒＠)ノ", "(✧ω✧)", "♪(๑ᴖ◡ᴖ๑)♪", "(≧◡≦)", "( ´ ▽ ` )ノ",
+    "φ(゜▽゜*)♪",
+    "( ˘▽˘)っ",
+    "(⌐■_■)",
+    "٩(｡•́‿•̀｡)۶",
+    "(◕‿◕✿)",
+    "ヾ(＠⌒ー⌒＠)ノ",
+    "(✧ω✧)",
+    "♪(๑ᴖ◡ᴖ๑)♪",
+    "(≧◡≦)",
+    "( ´ ▽ ` )ノ",
 ]
 KAWAII_TERMINAL = [
-    "ヽ(>∀<☆)ノ", "(ノ°∀°)ノ", "٩(^ᴗ^)۶", "ヾ(⌐■_■)ノ♪", "(•̀ᴗ•́)و",
-    "┗(＾0＾)┓", "(｀・ω・´)", "＼(￣▽￣)／", "(ง •̀_•́)ง", "ヽ(´▽`)/",
+    "ヽ(>∀<☆)ノ",
+    "(ノ°∀°)ノ",
+    "٩(^ᴗ^)۶",
+    "ヾ(⌐■_■)ノ♪",
+    "(•̀ᴗ•́)و",
+    "┗(＾0＾)┓",
+    "(｀・ω・´)",
+    "＼(￣▽￣)／",
+    "(ง •̀_•́)ง",
+    "ヽ(´▽`)/",
 ]
 KAWAII_BROWSER = [
-    "(ノ°∀°)ノ", "(☞゚ヮ゚)☞", "( ͡° ͜ʖ ͡°)", "┌( ಠ_ಠ)┘", "(⊙_⊙)？",
-    "ヾ(•ω•`)o", "(￣ω￣)", "( ˇωˇ )", "(ᵔᴥᵔ)", "＼(◎o◎)／",
+    "(ノ°∀°)ノ",
+    "(☞゚ヮ゚)☞",
+    "( ͡° ͜ʖ ͡°)",
+    "┌( ಠ_ಠ)┘",
+    "(⊙_⊙)？",
+    "ヾ(•ω•`)o",
+    "(￣ω￣)",
+    "( ˇωˇ )",
+    "(ᵔᴥᵔ)",
+    "＼(◎o◎)／",
 ]
 KAWAII_CREATE = [
-    "✧*。٩(ˊᗜˋ*)و✧", "(ﾉ◕ヮ◕)ﾉ*:・ﾟ✧", "ヽ(>∀<☆)ノ", "٩(♡ε♡)۶", "(◕‿◕)♡",
-    "✿◕ ‿ ◕✿", "(*≧▽≦)", "ヾ(＾-＾)ノ", "(☆▽☆)", "°˖✧◝(⁰▿⁰)◜✧˖°",
+    "✧*。٩(ˊᗜˋ*)و✧",
+    "(ﾉ◕ヮ◕)ﾉ*:・ﾟ✧",
+    "ヽ(>∀<☆)ノ",
+    "٩(♡ε♡)۶",
+    "(◕‿◕)♡",
+    "✿◕ ‿ ◕✿",
+    "(*≧▽≦)",
+    "ヾ(＾-＾)ノ",
+    "(☆▽☆)",
+    "°˖✧◝(⁰▿⁰)◜✧˖°",
 ]
 KAWAII_SKILL = [
-    "ヾ(＠⌒ー⌒＠)ノ", "(๑˃ᴗ˂)ﻭ", "٩(◕‿◕｡)۶", "(✿╹◡╹)", "ヽ(・∀・)ノ",
-    "(ノ´ヮ`)ノ*:・ﾟ✧", "♪(๑ᴖ◡ᴖ๑)♪", "(◠‿◠)", "٩(ˊᗜˋ*)و", "(＾▽＾)",
-    "ヾ(＾∇＾)", "(★ω★)/", "٩(｡•́‿•̀｡)۶", "(◕ᴗ◕✿)", "＼(◎o◎)／",
-    "(✧ω✧)", "ヽ(>∀<☆)ノ", "( ˘▽˘)っ", "(≧◡≦) ♡", "ヾ(￣▽￣)",
+    "ヾ(＠⌒ー⌒＠)ノ",
+    "(๑˃ᴗ˂)ﻭ",
+    "٩(◕‿◕｡)۶",
+    "(✿╹◡╹)",
+    "ヽ(・∀・)ノ",
+    "(ノ´ヮ`)ノ*:・ﾟ✧",
+    "♪(๑ᴖ◡ᴖ๑)♪",
+    "(◠‿◠)",
+    "٩(ˊᗜˋ*)و",
+    "(＾▽＾)",
+    "ヾ(＾∇＾)",
+    "(★ω★)/",
+    "٩(｡•́‿•̀｡)۶",
+    "(◕ᴗ◕✿)",
+    "＼(◎o◎)／",
+    "(✧ω✧)",
+    "ヽ(>∀<☆)ノ",
+    "( ˘▽˘)っ",
+    "(≧◡≦) ♡",
+    "ヾ(￣▽￣)",
 ]
 KAWAII_THINK = [
-    "(っ°Д°;)っ", "(；′⌒`)", "(・_・ヾ", "( ´_ゝ`)", "(￣ヘ￣)",
-    "(。-`ω´-)", "( ˘︹˘ )", "(¬_¬)", "ヽ(ー_ー )ノ", "(；一_一)",
+    "(っ°Д°;)っ",
+    "(；′⌒`)",
+    "(・_・ヾ",
+    "( ´_ゝ`)",
+    "(￣ヘ￣)",
+    "(。-`ω´-)",
+    "( ˘︹˘ )",
+    "(¬_¬)",
+    "ヽ(ー_ー )ノ",
+    "(；一_一)",
 ]
 KAWAII_GENERIC = [
-    "♪(´ε` )", "(◕‿◕✿)", "ヾ(＾∇＾)", "٩(◕‿◕｡)۶", "(✿◠‿◠)",
-    "(ノ´ヮ`)ノ*:・ﾟ✧", "ヽ(>∀<☆)ノ", "(☆▽☆)", "( ˘▽˘)っ", "(≧◡≦)",
+    "♪(´ε` )",
+    "(◕‿◕✿)",
+    "ヾ(＾∇＾)",
+    "٩(◕‿◕｡)۶",
+    "(✿◠‿◠)",
+    "(ノ´ヮ`)ノ*:・ﾟ✧",
+    "ヽ(>∀<☆)ノ",
+    "(☆▽☆)",
+    "( ˘▽˘)っ",
+    "(≧◡≦)",
 ]
 
 
 # =========================================================================
 # Cute tool message (completion line that replaces the spinner)
 # =========================================================================
+
 
 def _detect_tool_failure(tool_name: str, result: str | None) -> tuple[bool, str]:
     """Inspect a tool result string for signs of failure.
@@ -791,7 +932,9 @@ def _detect_tool_failure(tool_name: str, result: str | None) -> tuple[bool, str]
     if tool_name == "memory":
         try:
             data = json.loads(result)
-            if data.get("success") is False and "exceed the limit" in data.get("error", ""):
+            if data.get("success") is False and "exceed the limit" in data.get(
+                "error", ""
+            ):
                 return True, " [full]"
         except (json.JSONDecodeError, TypeError, AttributeError):
             logger.debug("Could not parse memory result as JSON for capacity check")
@@ -805,7 +948,10 @@ def _detect_tool_failure(tool_name: str, result: str | None) -> tuple[bool, str]
 
 
 def get_cute_tool_message(
-    tool_name: str, args: dict, duration: float, result: str | None = None,
+    tool_name: str,
+    args: dict,
+    duration: float,
+    result: str | None = None,
 ) -> str:
     """Generate a formatted tool completion line for CLI quiet mode.
 
@@ -822,13 +968,13 @@ def get_cute_tool_message(
         s = str(s)
         if _tool_preview_max_len == 0:
             return s  # no limit
-        return (s[:n-3] + "...") if len(s) > n else s
+        return (s[: n - 3] + "...") if len(s) > n else s
 
     def _path(p, n=35):
         p = str(p)
         if _tool_preview_max_len == 0:
             return p  # no limit
-        return ("..." + p[-(n-3):]) if len(p) > n else p
+        return ("..." + p[-(n - 3) :]) if len(p) > n else p
 
     def _wrap(line: str) -> str:
         """Apply skin tool prefix and failure suffix."""
@@ -845,7 +991,7 @@ def get_cute_tool_message(
         if urls:
             url = urls[0] if isinstance(urls, list) else str(urls)
             domain = url.replace("https://", "").replace("http://", "").split("/")[0]
-            extra = f" +{len(urls)-1}" if len(urls) > 1 else ""
+            extra = f" +{len(urls) - 1}" if len(urls) > 1 else ""
             return _wrap(f"┊ 📄 fetch     {_trunc(domain, 35)}{extra}  {dur}")
         return _wrap(f"┊ 📄 fetch     pages  {dur}")
     if tool_name == "web_crawl":
@@ -857,8 +1003,15 @@ def get_cute_tool_message(
     if tool_name == "process":
         action = args.get("action", "?")
         sid = args.get("session_id", "")[:12]
-        labels = {"list": "ls processes", "poll": f"poll {sid}", "log": f"log {sid}",
-                  "wait": f"wait {sid}", "kill": f"kill {sid}", "write": f"write {sid}", "submit": f"submit {sid}"}
+        labels = {
+            "list": "ls processes",
+            "poll": f"poll {sid}",
+            "log": f"log {sid}",
+            "wait": f"wait {sid}",
+            "kill": f"kill {sid}",
+            "write": f"write {sid}",
+            "submit": f"submit {sid}",
+        }
         return _wrap(f"┊ ⚙️  proc      {labels.get(action, f'{action} {sid}')}  {dur}")
     if tool_name == "read_file":
         return _wrap(f"┊ 📖 read      {_path(args.get('path', ''))}  {dur}")
@@ -881,7 +1034,7 @@ def get_cute_tool_message(
     if tool_name == "browser_click":
         return _wrap(f"┊ 👆 click     {args.get('ref', '?')}  {dur}")
     if tool_name == "browser_type":
-        return _wrap(f"┊ ⌨️  type      \"{_trunc(args.get('text', ''), 30)}\"  {dur}")
+        return _wrap(f'┊ ⌨️  type      "{_trunc(args.get("text", ""), 30)}"  {dur}')
     if tool_name == "browser_scroll":
         d = args.get("direction", "down")
         arrow = {"down": "↓", "up": "↑", "right": "→", "left": "←"}.get(d, "↓")
@@ -906,16 +1059,22 @@ def get_cute_tool_message(
         else:
             return _wrap(f"┊ 📋 plan      {len(todos_arg)} task(s)  {dur}")
     if tool_name == "session_search":
-        return _wrap(f"┊ 🔍 recall    \"{_trunc(args.get('query', ''), 35)}\"  {dur}")
+        return _wrap(f'┊ 🔍 recall    "{_trunc(args.get("query", ""), 35)}"  {dur}')
     if tool_name == "memory":
         action = args.get("action", "?")
         target = args.get("target", "")
         if action == "add":
-            return _wrap(f"┊ 🧠 memory    +{target}: \"{_trunc(args.get('content', ''), 30)}\"  {dur}")
+            return _wrap(
+                f'┊ 🧠 memory    +{target}: "{_trunc(args.get("content", ""), 30)}"  {dur}'
+            )
         elif action == "replace":
-            return _wrap(f"┊ 🧠 memory    ~{target}: \"{_trunc(args.get('old_text', ''), 20)}\"  {dur}")
+            return _wrap(
+                f'┊ 🧠 memory    ~{target}: "{_trunc(args.get("old_text", ""), 20)}"  {dur}'
+            )
         elif action == "remove":
-            return _wrap(f"┊ 🧠 memory    -{target}: \"{_trunc(args.get('old_text', ''), 20)}\"  {dur}")
+            return _wrap(
+                f'┊ 🧠 memory    -{target}: "{_trunc(args.get("old_text", ""), 20)}"  {dur}'
+            )
         return _wrap(f"┊ 🧠 memory    {action}  {dur}")
     if tool_name == "skills_list":
         return _wrap(f"┊ 📚 skills    list {args.get('category', 'all')}  {dur}")
@@ -927,28 +1086,41 @@ def get_cute_tool_message(
         return _wrap(f"┊ 🔊 speak     {_trunc(args.get('text', ''), 30)}  {dur}")
     if tool_name == "vision_analyze":
         return _wrap(f"┊ 👁️  vision    {_trunc(args.get('question', ''), 30)}  {dur}")
-    if tool_name == "mixture_of_agents":
-        return _wrap(f"┊ 🧠 reason    {_trunc(args.get('user_prompt', ''), 30)}  {dur}")
     if tool_name == "send_message":
-        return _wrap(f"┊ 📨 send      {args.get('target', '?')}: \"{_trunc(args.get('message', ''), 25)}\"  {dur}")
+        return _wrap(
+            f'┊ 📨 send      {args.get("target", "?")}: "{_trunc(args.get("message", ""), 25)}"  {dur}'
+        )
     if tool_name == "cronjob":
         action = args.get("action", "?")
         if action == "create":
-            skills = args.get("skills") or ([] if not args.get("skill") else [args.get("skill")])
-            label = args.get("name") or (skills[0] if skills else None) or args.get("prompt", "task")
+            skills = args.get("skills") or (
+                [] if not args.get("skill") else [args.get("skill")]
+            )
+            label = (
+                args.get("name")
+                or (skills[0] if skills else None)
+                or args.get("prompt", "task")
+            )
             return _wrap(f"┊ ⏰ cron      create {_trunc(label, 24)}  {dur}")
         if action == "list":
             return _wrap(f"┊ ⏰ cron      listing  {dur}")
         return _wrap(f"┊ ⏰ cron      {action} {args.get('job_id', '')}  {dur}")
     if tool_name.startswith("rl_"):
         rl = {
-            "rl_list_environments": "list envs", "rl_select_environment": f"select {args.get('name', '')}",
-            "rl_get_current_config": "get config", "rl_edit_config": f"set {args.get('field', '?')}",
-            "rl_start_training": "start training", "rl_check_status": f"status {args.get('run_id', '?')[:12]}",
-            "rl_stop_training": f"stop {args.get('run_id', '?')[:12]}", "rl_get_results": f"results {args.get('run_id', '?')[:12]}",
-            "rl_list_runs": "list runs", "rl_test_inference": "test inference",
+            "rl_list_environments": "list envs",
+            "rl_select_environment": f"select {args.get('name', '')}",
+            "rl_get_current_config": "get config",
+            "rl_edit_config": f"set {args.get('field', '?')}",
+            "rl_start_training": "start training",
+            "rl_check_status": f"status {args.get('run_id', '?')[:12]}",
+            "rl_stop_training": f"stop {args.get('run_id', '?')[:12]}",
+            "rl_get_results": f"results {args.get('run_id', '?')[:12]}",
+            "rl_list_runs": "list runs",
+            "rl_test_inference": "test inference",
         }
-        return _wrap(f"┊ 🧪 rl        {rl.get(tool_name, tool_name.replace('rl_', ''))}  {dur}")
+        return _wrap(
+            f"┊ 🧪 rl        {rl.get(tool_name, tool_name.replace('rl_', ''))}  {dur}"
+        )
     if tool_name == "execute_code":
         code = args.get("code", "")
         first_line = code.strip().split("\n")[0] if code.strip() else ""
@@ -975,6 +1147,7 @@ _ANSI_RESET = "\033[0m"
 def honcho_session_url(workspace: str, session_name: str) -> str:
     """Build a Honcho app URL for a session."""
     from urllib.parse import quote
+
     return (
         f"https://app.honcho.dev/explore"
         f"?workspace={quote(workspace, safe='')}"
@@ -1043,7 +1216,11 @@ def format_context_pressure(
     filled = min(int(compaction_progress * _BAR_WIDTH), _BAR_WIDTH)
     bar = _BAR_FILLED * filled + _BAR_EMPTY * (_BAR_WIDTH - filled)
 
-    threshold_k = f"{threshold_tokens // 1000}k" if threshold_tokens >= 1000 else str(threshold_tokens)
+    threshold_k = (
+        f"{threshold_tokens // 1000}k"
+        if threshold_tokens >= 1000
+        else str(threshold_tokens)
+    )
     threshold_pct_int = int(threshold_percent * 100)
 
     color = f"{_BOLD}{_YELLOW}"

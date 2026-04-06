@@ -248,12 +248,26 @@ class TestMemoryManager:
 
     def test_tool_schemas_collected(self):
         mgr = MemoryManager()
-        p1 = FakeMemoryProvider("builtin", tools=[
-            {"name": "recall_builtin", "description": "Builtin recall", "parameters": {}}
-        ])
-        p2 = FakeMemoryProvider("external", tools=[
-            {"name": "recall_ext", "description": "External recall", "parameters": {}}
-        ])
+        p1 = FakeMemoryProvider(
+            "builtin",
+            tools=[
+                {
+                    "name": "recall_builtin",
+                    "description": "Builtin recall",
+                    "parameters": {},
+                }
+            ],
+        )
+        p2 = FakeMemoryProvider(
+            "external",
+            tools=[
+                {
+                    "name": "recall_ext",
+                    "description": "External recall",
+                    "parameters": {},
+                }
+            ],
+        )
         mgr.add_provider(p1)
         mgr.add_provider(p2)
 
@@ -263,12 +277,22 @@ class TestMemoryManager:
 
     def test_tool_name_conflict_first_wins(self):
         mgr = MemoryManager()
-        p1 = FakeMemoryProvider("builtin", tools=[
-            {"name": "shared_tool", "description": "From builtin", "parameters": {}}
-        ])
-        p2 = FakeMemoryProvider("external", tools=[
-            {"name": "shared_tool", "description": "From external", "parameters": {}}
-        ])
+        p1 = FakeMemoryProvider(
+            "builtin",
+            tools=[
+                {"name": "shared_tool", "description": "From builtin", "parameters": {}}
+            ],
+        )
+        p2 = FakeMemoryProvider(
+            "external",
+            tools=[
+                {
+                    "name": "shared_tool",
+                    "description": "From external",
+                    "parameters": {},
+                }
+            ],
+        )
         mgr.add_provider(p1)
         mgr.add_provider(p2)
 
@@ -284,12 +308,16 @@ class TestMemoryManager:
 
     def test_tool_routing(self):
         mgr = MemoryManager()
-        p1 = FakeMemoryProvider("builtin", tools=[
-            {"name": "builtin_tool", "description": "Builtin", "parameters": {}}
-        ])
-        p2 = FakeMemoryProvider("external", tools=[
-            {"name": "ext_tool", "description": "External", "parameters": {}}
-        ])
+        p1 = FakeMemoryProvider(
+            "builtin",
+            tools=[
+                {"name": "builtin_tool", "description": "Builtin", "parameters": {}}
+            ],
+        )
+        p2 = FakeMemoryProvider(
+            "external",
+            tools=[{"name": "ext_tool", "description": "External", "parameters": {}}],
+        )
         mgr.add_provider(p1)
         mgr.add_provider(p2)
 
@@ -406,7 +434,9 @@ class TestBuiltinMemoryProvider:
 
     def test_system_prompt_with_store(self):
         store = MagicMock()
-        store.format_for_system_prompt.side_effect = lambda t: f"BLOCK_{t}" if t == "memory" else f"BLOCK_{t}"
+        store.format_for_system_prompt.side_effect = lambda t: (
+            f"BLOCK_{t}" if t == "memory" else f"BLOCK_{t}"
+        )
 
         p = BuiltinMemoryProvider(
             memory_store=store,
@@ -462,11 +492,11 @@ class TestSingleProviderGating:
         builtin = BuiltinMemoryProvider()
         mgr.add_provider(builtin)
 
-        # Simulate what run_agent.py does when provider="" 
+        # Simulate what run_agent.py does when provider=""
         configured = ""
         available_plugins = [
-            FakeMemoryProvider("holographic"),
-            FakeMemoryProvider("mem0"),
+            FakeMemoryProvider("honcho"),
+            FakeMemoryProvider("legacy"),
         ]
         # With empty config, no plugins should be added
         if configured:
@@ -482,16 +512,16 @@ class TestSingleProviderGating:
         builtin = BuiltinMemoryProvider()
         mgr.add_provider(builtin)
 
-        configured = "holographic"
-        p1 = FakeMemoryProvider("holographic")
-        p2 = FakeMemoryProvider("mem0")
-        p3 = FakeMemoryProvider("hindsight")
+        configured = "honcho"
+        p1 = FakeMemoryProvider("honcho")
+        p2 = FakeMemoryProvider("legacy")
+        p3 = FakeMemoryProvider("fallback")
 
         for p in [p1, p2, p3]:
             if p.name == configured and p.is_available():
                 mgr.add_provider(p)
 
-        assert mgr.provider_names == ["builtin", "holographic"]
+        assert mgr.provider_names == ["builtin", "honcho"]
         assert p1.initialized is False  # not initialized by the gating logic itself
 
     def test_unavailable_provider_skipped(self):
@@ -500,8 +530,8 @@ class TestSingleProviderGating:
         builtin = BuiltinMemoryProvider()
         mgr.add_provider(builtin)
 
-        configured = "holographic"
-        p1 = FakeMemoryProvider("holographic", available=False)
+        configured = "honcho"
+        p1 = FakeMemoryProvider("honcho", available=False)
 
         for p in [p1]:
             if p.name == configured and p.is_available():
@@ -516,7 +546,7 @@ class TestSingleProviderGating:
         mgr.add_provider(builtin)
 
         configured = "nonexistent"
-        plugins = [FakeMemoryProvider("holographic"), FakeMemoryProvider("mem0")]
+        plugins = [FakeMemoryProvider("honcho"), FakeMemoryProvider("legacy")]
 
         for p in plugins:
             if p.name == configured and p.is_available():
@@ -531,19 +561,23 @@ class TestPluginMemoryDiscovery:
     def test_discover_finds_providers(self):
         """discover_memory_providers returns available providers."""
         from plugins.memory import discover_memory_providers
+
         providers = discover_memory_providers()
         names = [name for name, _, _ in providers]
-        assert "holographic" in names  # always available (no external deps)
+        assert "honcho" in names
 
     def test_load_provider_by_name(self):
         """load_memory_provider returns a working provider instance."""
         from plugins.memory import load_memory_provider
-        p = load_memory_provider("holographic")
+
+        p = load_memory_provider("honcho")
         assert p is not None
-        assert p.name == "holographic"
-        assert p.is_available()
+        assert p.name == "honcho"
+        # is_available() depends on HONCHO_API_KEY config, so we just check it's callable
+        assert callable(p.is_available)
 
     def test_load_nonexistent_returns_none(self):
         """load_memory_provider returns None for unknown names."""
         from plugins.memory import load_memory_provider
+
         assert load_memory_provider("nonexistent_provider") is None
