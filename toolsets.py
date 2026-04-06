@@ -268,6 +268,8 @@ TOOLSETS = {
             "search_files",
             # Vision
             "vision_analyze",
+            # Image generation
+            "image_generate",
             # Skills
             "skills_list",
             "skill_view",
@@ -289,9 +291,16 @@ TOOLSETS = {
             "memory",
             # Session history search
             "session_search",
+            # Cronjob
+            "cronjob",
             # Code execution + delegation
             "execute_code",
             "delegate_task",
+            # Home assistant
+            "ha_list_entities",
+            "ha_get_state",
+            "ha_list_services",
+            "ha_call_service",
         ],
         "includes": [],
     },

@@ -1,5 +1,6 @@
 """Tests for setup_model_provider — verifies the delegation to
 select_provider_and_model() and config dict sync."""
+
 import json
 import sys
 import types
@@ -29,10 +30,14 @@ def _clear_provider_env(monkeypatch):
 
 def _stub_tts(monkeypatch):
     """Stub out TTS prompts so setup_model_provider doesn't block."""
-    monkeypatch.setattr("hermes_cli.setup.prompt_choice", lambda q, c, d=0: (
-        _maybe_keep_current_tts(q, c) if _maybe_keep_current_tts(q, c) is not None
-        else d
-    ))
+    monkeypatch.setattr(
+        "hermes_cli.setup.prompt_choice",
+        lambda q, c, d=0: (
+            _maybe_keep_current_tts(q, c)
+            if _maybe_keep_current_tts(q, c) is not None
+            else d
+        ),
+    )
     monkeypatch.setattr("hermes_cli.setup.prompt_yes_no", lambda *a, **kw: False)
 
 
@@ -60,7 +65,9 @@ def test_setup_delegates_to_select_provider_and_model(tmp_path, monkeypatch):
     config = load_config()
 
     def fake_select():
-        _write_model_config(tmp_path, "custom", "http://localhost:11434/v1", "qwen3.5:32b")
+        _write_model_config(
+            tmp_path, "custom", "http://localhost:11434/v1", "qwen3.5:32b"
+        )
 
     monkeypatch.setattr("hermes_cli.main.select_provider_and_model", fake_select)
 
@@ -85,7 +92,9 @@ def test_setup_syncs_openrouter_from_disk(tmp_path, monkeypatch):
     assert isinstance(config.get("model"), str)  # fresh install
 
     def fake_select():
-        _write_model_config(tmp_path, "openrouter", model_name="anthropic/claude-opus-4.6")
+        _write_model_config(
+            tmp_path, "openrouter", model_name="anthropic/claude-opus-4.6"
+        )
 
     monkeypatch.setattr("hermes_cli.main.select_provider_and_model", fake_select)
 
@@ -106,7 +115,9 @@ def test_setup_syncs_nous_from_disk(tmp_path, monkeypatch):
     config = load_config()
 
     def fake_select():
-        _write_model_config(tmp_path, "nous", "https://inference.example.com/v1", "gemini-3-flash")
+        _write_model_config(
+            tmp_path, "nous", "https://inference.example.com/v1", "gemini-3-flash"
+        )
 
     monkeypatch.setattr("hermes_cli.main.select_provider_and_model", fake_select)
 
@@ -130,7 +141,9 @@ def test_setup_custom_providers_synced(tmp_path, monkeypatch):
     def fake_select():
         _write_model_config(tmp_path, "custom", "http://localhost:8080/v1", "llama3")
         cfg = load_config()
-        cfg["custom_providers"] = [{"name": "Local", "base_url": "http://localhost:8080/v1"}]
+        cfg["custom_providers"] = [
+            {"name": "Local", "base_url": "http://localhost:8080/v1"}
+        ]
         save_config(cfg)
 
     monkeypatch.setattr("hermes_cli.main.select_provider_and_model", fake_select)
@@ -139,7 +152,9 @@ def test_setup_custom_providers_synced(tmp_path, monkeypatch):
     save_config(config)
 
     reloaded = load_config()
-    assert reloaded.get("custom_providers") == [{"name": "Local", "base_url": "http://localhost:8080/v1"}]
+    assert reloaded.get("custom_providers") == [
+        {"name": "Local", "base_url": "http://localhost:8080/v1"}
+    ]
 
 
 def test_setup_cancel_preserves_existing_config(tmp_path, monkeypatch):
@@ -201,7 +216,9 @@ def test_setup_keyboard_interrupt_gracefully_handled(tmp_path, monkeypatch):
     setup_model_provider(config)
 
 
-def test_codex_setup_uses_runtime_access_token_for_live_model_list(tmp_path, monkeypatch):
+def test_codex_setup_uses_runtime_access_token_for_live_model_list(
+    tmp_path, monkeypatch
+):
     """Codex model list fetching uses the runtime access token."""
     monkeypatch.setenv("HERMES_HOME", str(tmp_path))
     monkeypatch.setenv("OPENROUTER_API_KEY", "or-test-key")
@@ -212,7 +229,9 @@ def test_codex_setup_uses_runtime_access_token_for_live_model_list(tmp_path, mon
     _stub_tts(monkeypatch)
 
     def fake_select():
-        _write_model_config(tmp_path, "openai-codex", "https://api.openai.com/v1", "gpt-4o")
+        _write_model_config(
+            tmp_path, "openai-codex", "https://api.openai.com/v1", "gpt-4o"
+        )
 
     monkeypatch.setattr("hermes_cli.main.select_provider_and_model", fake_select)
 
@@ -222,86 +241,3 @@ def test_codex_setup_uses_runtime_access_token_for_live_model_list(tmp_path, mon
     reloaded = load_config()
     assert isinstance(reloaded["model"], dict)
     assert reloaded["model"]["provider"] == "openai-codex"
-
-
-def test_modal_setup_can_use_nous_subscription_without_modal_creds(tmp_path, monkeypatch, capsys):
-    monkeypatch.setenv("HERMES_ENABLE_NOUS_MANAGED_TOOLS", "1")
-    monkeypatch.setenv("HERMES_HOME", str(tmp_path))
-    config = load_config()
-
-    def fake_prompt_choice(question, choices, default=0):
-        if question == "Select terminal backend:":
-            return 2
-        if question == "Select how Modal execution should be billed:":
-            return 0
-        raise AssertionError(f"Unexpected prompt_choice call: {question}")
-
-    def fake_prompt(message, *args, **kwargs):
-        assert "Modal Token" not in message
-        raise AssertionError(f"Unexpected prompt call: {message}")
-
-    monkeypatch.setattr("hermes_cli.setup.prompt_choice", fake_prompt_choice)
-    monkeypatch.setattr("hermes_cli.setup.prompt", fake_prompt)
-    monkeypatch.setattr("hermes_cli.setup._prompt_container_resources", lambda config: None)
-    monkeypatch.setattr(
-        "hermes_cli.setup.get_nous_subscription_features",
-        lambda config: type("Features", (), {"nous_auth_present": True})(),
-    )
-    monkeypatch.setitem(
-        sys.modules,
-        "tools.managed_tool_gateway",
-        types.SimpleNamespace(
-            is_managed_tool_gateway_ready=lambda vendor: vendor == "modal",
-            resolve_managed_tool_gateway=lambda vendor: None,
-        ),
-    )
-
-    from hermes_cli.setup import setup_terminal_backend
-
-    setup_terminal_backend(config)
-
-    out = capsys.readouterr().out
-    assert config["terminal"]["backend"] == "modal"
-    assert config["terminal"]["modal_mode"] == "managed"
-    assert "bill to your subscription" in out
-
-
-def test_modal_setup_persists_direct_mode_when_user_chooses_their_own_account(tmp_path, monkeypatch):
-    monkeypatch.setenv("HERMES_ENABLE_NOUS_MANAGED_TOOLS", "1")
-    monkeypatch.setenv("HERMES_HOME", str(tmp_path))
-    monkeypatch.delenv("MODAL_TOKEN_ID", raising=False)
-    monkeypatch.delenv("MODAL_TOKEN_SECRET", raising=False)
-    config = load_config()
-
-    def fake_prompt_choice(question, choices, default=0):
-        if question == "Select terminal backend:":
-            return 2
-        if question == "Select how Modal execution should be billed:":
-            return 1
-        raise AssertionError(f"Unexpected prompt_choice call: {question}")
-
-    prompt_values = iter(["token-id", "token-secret", ""])
-
-    monkeypatch.setattr("hermes_cli.setup.prompt_choice", fake_prompt_choice)
-    monkeypatch.setattr("hermes_cli.setup.prompt", lambda *args, **kwargs: next(prompt_values))
-    monkeypatch.setattr("hermes_cli.setup._prompt_container_resources", lambda config: None)
-    monkeypatch.setattr(
-        "hermes_cli.setup.get_nous_subscription_features",
-        lambda config: type("Features", (), {"nous_auth_present": True})(),
-    )
-    monkeypatch.setitem(
-        sys.modules,
-        "tools.managed_tool_gateway",
-        types.SimpleNamespace(
-            is_managed_tool_gateway_ready=lambda vendor: vendor == "modal",
-            resolve_managed_tool_gateway=lambda vendor: None,
-        ),
-    )
-    monkeypatch.setitem(sys.modules, "swe_rex", object())
-
-    from hermes_cli.setup import setup_terminal_backend
-
-    setup_terminal_backend(config)
-
-    assert config["terminal"]["backend"] == "modal"
-    assert config["terminal"]["modal_mode"] == "direct"

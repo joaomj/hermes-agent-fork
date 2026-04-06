@@ -46,14 +46,16 @@ def _make_cli(**kwargs):
         "prompt_toolkit.formatted_text": MagicMock(),
         "prompt_toolkit.auto_suggest": MagicMock(),
     }
-    with patch.dict(sys.modules, prompt_toolkit_stubs), patch.dict(
-        "os.environ", clean_env, clear=False
+    with (
+        patch.dict(sys.modules, prompt_toolkit_stubs),
+        patch.dict("os.environ", clean_env, clear=False),
     ):
         import cli as _cli_mod
 
         _cli_mod = importlib.reload(_cli_mod)
-        with patch.object(_cli_mod, "get_tool_definitions", return_value=[]), patch.dict(
-            _cli_mod.__dict__, {"CLI_CONFIG": _clean_config}
+        with (
+            patch.object(_cli_mod, "get_tool_definitions", return_value=[]),
+            patch.dict(_cli_mod.__dict__, {"CLI_CONFIG": _clean_config}),
         ):
             return _cli_mod.HermesCLI(**kwargs)
 
@@ -84,14 +86,22 @@ class TestExtensionHookDefaults:
             image_bar="image-bar",
             input_area="input-area",
             input_rule_bot="bottom-rule",
-            voice_status_bar="voice-status",
             completions_menu="completions-menu",
         )
         # First element is Window(height=0), rest are the named widgets
         assert children[1:] == [
-            "sudo", "secret", "approval", "clarify", "spinner",
-            "spacer", "status", "top-rule", "image-bar", "input-area",
-            "bottom-rule", "voice-status", "completions-menu",
+            "sudo",
+            "secret",
+            "approval",
+            "clarify",
+            "spinner",
+            "spacer",
+            "status",
+            "top-rule",
+            "image-bar",
+            "input-area",
+            "bottom-rule",
+            "completions-menu",
         ]
 
 
@@ -113,7 +123,6 @@ class TestExtensionHookSubclass:
             image_bar="image-bar",
             input_area="input-area",
             input_rule_bot="bottom-rule",
-            voice_status_bar="voice-status",
             completions_menu="completions-menu",
         )
         # Extra widgets should appear between spacer and status bar

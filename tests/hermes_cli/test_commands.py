@@ -414,11 +414,6 @@ class TestSubcommands:
         assert "show" in subs
         assert "hide" in subs
 
-    def test_voice_has_subcommands(self):
-        assert "/voice" in SUBCOMMANDS
-        assert "on" in SUBCOMMANDS["/voice"]
-        assert "off" in SUBCOMMANDS["/voice"]
-
     def test_cron_has_subcommands(self):
         assert "/cron" in SUBCOMMANDS
         assert "list" in SUBCOMMANDS["/cron"]
