@@ -177,13 +177,6 @@ COMMAND_REGISTRY: list[CommandDef] = [
         cli_only=True,
         args_hint="[name]",
     ),
-    CommandDef(
-        "voice",
-        "Toggle voice mode",
-        "Configuration",
-        args_hint="[on|off|tts|status]",
-        subcommands=("on", "off", "tts", "status"),
-    ),
     # Tools & Skills
     CommandDef(
         "tools",

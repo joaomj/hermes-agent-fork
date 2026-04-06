@@ -23,11 +23,7 @@ from hermes_cli.config import (
     save_env_value,
 )
 from hermes_cli.colors import Colors, color
-from hermes_cli.nous_subscription import (
-    apply_nous_managed_defaults,
-    get_nous_subscription_features,
-)
-from tools.tool_backend_helpers import managed_nous_tools_enabled
+
 
 logger = logging.getLogger(__name__)
 
@@ -104,7 +100,6 @@ CONFIGURABLE_TOOLSETS = [
     ("code_execution", "⚡ Code Execution", "execute_code"),
     ("vision", "👁️  Vision / Image Analysis", "vision_analyze"),
     ("image_gen", "🎨 Image Generation", "image_generate"),
-    ("tts", "🔊 Text-to-Speech", "text_to_speech"),
     ("skills", "📚 Skills", "list, view, manage"),
     ("todo", "📋 Task Planning", "todo"),
     ("memory", "💾 Memory", "persistent memory across sessions"),
@@ -183,66 +178,12 @@ PLATFORMS = {
 # Toolsets not in this map either need no config or use the simple fallback.
 
 TOOL_CATEGORIES = {
-    "tts": {
-        "name": "Text-to-Speech",
-        "icon": "🔊",
-        "providers": [
-            {
-                "name": "Nous Subscription",
-                "tag": "Managed OpenAI TTS billed to your subscription",
-                "env_vars": [],
-                "tts_provider": "openai",
-                "requires_nous_auth": True,
-                "managed_nous_feature": "tts",
-                "override_env_vars": ["VOICE_TOOLS_OPENAI_KEY", "OPENAI_API_KEY"],
-            },
-            {
-                "name": "Microsoft Edge TTS",
-                "tag": "Free - no API key needed",
-                "env_vars": [],
-                "tts_provider": "edge",
-            },
-            {
-                "name": "OpenAI TTS",
-                "tag": "Premium - high quality voices",
-                "env_vars": [
-                    {
-                        "key": "VOICE_TOOLS_OPENAI_KEY",
-                        "prompt": "OpenAI API key",
-                        "url": "https://platform.openai.com/api-keys",
-                    },
-                ],
-                "tts_provider": "openai",
-            },
-            {
-                "name": "ElevenLabs",
-                "tag": "Premium - most natural voices",
-                "env_vars": [
-                    {
-                        "key": "ELEVENLABS_API_KEY",
-                        "prompt": "ElevenLabs API key",
-                        "url": "https://elevenlabs.io/app/settings/api-keys",
-                    },
-                ],
-                "tts_provider": "elevenlabs",
-            },
-        ],
-    },
     "web": {
         "name": "Web Search & Extract",
         "setup_title": "Select Search Provider",
         "setup_note": "A free DuckDuckGo search skill is also included — skip this if you don't need a premium provider.",
         "icon": "🔍",
         "providers": [
-            {
-                "name": "Nous Subscription",
-                "tag": "Managed Firecrawl billed to your subscription",
-                "web_backend": "firecrawl",
-                "env_vars": [],
-                "requires_nous_auth": True,
-                "managed_nous_feature": "web",
-                "override_env_vars": ["FIRECRAWL_API_KEY", "FIRECRAWL_API_URL"],
-            },
             {
                 "name": "Firecrawl Cloud",
                 "tag": "Hosted service - search, extract, and crawl",
@@ -309,14 +250,6 @@ TOOL_CATEGORIES = {
         "icon": "🎨",
         "providers": [
             {
-                "name": "Nous Subscription",
-                "tag": "Managed FAL image generation billed to your subscription",
-                "env_vars": [],
-                "requires_nous_auth": True,
-                "managed_nous_feature": "image_gen",
-                "override_env_vars": ["FAL_KEY"],
-            },
-            {
                 "name": "FAL.ai",
                 "tag": "FLUX 2 Pro with auto-upscaling",
                 "env_vars": [
@@ -333,16 +266,6 @@ TOOL_CATEGORIES = {
         "name": "Browser Automation",
         "icon": "🌐",
         "providers": [
-            {
-                "name": "Nous Subscription (Browserbase cloud)",
-                "tag": "Managed Browserbase billed to your subscription",
-                "env_vars": [],
-                "browser_provider": "browserbase",
-                "requires_nous_auth": True,
-                "managed_nous_feature": "browser",
-                "override_env_vars": ["BROWSERBASE_API_KEY", "BROWSERBASE_PROJECT_ID"],
-                "post_setup": "browserbase",
-            },
             {
                 "name": "Local Browser",
                 "tag": "Free headless Chromium (no API key needed)",
@@ -379,20 +302,6 @@ TOOL_CATEGORIES = {
                 ],
                 "browser_provider": "browser-use",
                 "post_setup": "browserbase",
-            },
-            {
-                "name": "Camofox",
-                "tag": "Local anti-detection browser (Firefox/Camoufox)",
-                "env_vars": [
-                    {
-                        "key": "CAMOFOX_URL",
-                        "prompt": "Camofox server URL",
-                        "default": "http://localhost:9377",
-                        "url": "https://github.com/jo-inc/camofox-browser",
-                    },
-                ],
-                "browser_provider": "camofox",
-                "post_setup": "camofox",
             },
         ],
     },
@@ -456,35 +365,6 @@ def _run_post_setup(post_setup_key: str):
         elif not node_modules.exists():
             _print_warning(
                 "    Node.js not found - browser tools require: npm install (in hermes-agent directory)"
-            )
-
-    elif post_setup_key == "camofox":
-        camofox_dir = PROJECT_ROOT / "node_modules" / "@askjo" / "camoufox-browser"
-        if not camofox_dir.exists() and shutil.which("npm"):
-            _print_info("    Installing Camofox browser server...")
-            import subprocess
-
-            result = subprocess.run(
-                ["npm", "install", "--silent"],
-                capture_output=True,
-                text=True,
-                cwd=str(PROJECT_ROOT),
-            )
-            if result.returncode == 0:
-                _print_success("    Camofox installed")
-            else:
-                _print_warning("    npm install failed - run manually: npm install")
-        if camofox_dir.exists():
-            _print_info("    Start the Camofox server:")
-            _print_info("      npx @askjo/camoufox-browser")
-            _print_info("    First run downloads the Camoufox engine (~300MB)")
-            _print_info(
-                "    Or use Docker: docker run -p 9377:9377 -e CAMOFOX_PORT=9377 jo-inc/camofox-browser"
-            )
-        elif not shutil.which("npm"):
-            _print_warning("    Node.js not found. Install Camofox via Docker:")
-            _print_info(
-                "      docker run -p 9377:9377 -e CAMOFOX_PORT=9377 jo-inc/camofox-browser"
             )
 
 
@@ -689,12 +569,6 @@ def _toolset_has_keys(ts_key: str, config: dict = None) -> bool:
             return client is not None
         except Exception:
             return False
-
-    if ts_key in {"web", "image_gen", "tts", "browser"}:
-        features = get_nous_subscription_features(config)
-        feature = features.features.get(ts_key)
-        if feature and (feature.available or feature.managed_by_nous):
-            return True
 
     # Check TOOL_CATEGORIES first (provider-aware)
     cat = TOOL_CATEGORIES.get(ts_key)
@@ -928,13 +802,8 @@ def _configure_toolset(ts_key: str, config: dict):
 
 def _visible_providers(cat: dict, config: dict) -> list[dict]:
     """Return provider entries visible for the current auth/config state."""
-    features = get_nous_subscription_features(config)
     visible = []
     for provider in cat.get("providers", []):
-        if provider.get("managed_nous_feature") and not managed_nous_tools_enabled():
-            continue
-        if provider.get("requires_nous_auth") and not features.nous_auth_present:
-            continue
         visible.append(provider)
     return visible
 
@@ -945,9 +814,6 @@ def _toolset_needs_configuration_prompt(ts_key: str, config: dict) -> bool:
     if not cat:
         return not _toolset_has_keys(ts_key, config)
 
-    if ts_key == "tts":
-        tts_cfg = config.get("tts", {})
-        return not isinstance(tts_cfg, dict) or "provider" not in tts_cfg
     if ts_key == "web":
         web_cfg = config.get("web", {})
         return not isinstance(web_cfg, dict) or "backend" not in web_cfg
@@ -1031,29 +897,6 @@ def _configure_tool_category(ts_key: str, cat: dict, config: dict):
 
 def _is_provider_active(provider: dict, config: dict) -> bool:
     """Check if a provider entry matches the currently active config."""
-    managed_feature = provider.get("managed_nous_feature")
-    if managed_feature:
-        features = get_nous_subscription_features(config)
-        feature = features.features.get(managed_feature)
-        if feature is None:
-            return False
-        if managed_feature == "image_gen":
-            return feature.managed_by_nous
-        if provider.get("tts_provider"):
-            return (
-                feature.managed_by_nous
-                and config.get("tts", {}).get("provider") == provider["tts_provider"]
-            )
-        if "browser_provider" in provider:
-            current = config.get("browser", {}).get("cloud_provider")
-            return feature.managed_by_nous and provider["browser_provider"] == current
-        if provider.get("web_backend"):
-            current = config.get("web", {}).get("backend")
-            return feature.managed_by_nous and current == provider["web_backend"]
-        return feature.managed_by_nous
-
-    if provider.get("tts_provider"):
-        return config.get("tts", {}).get("provider") == provider["tts_provider"]
     if "browser_provider" in provider:
         current = config.get("browser", {}).get("cloud_provider")
         return provider["browser_provider"] == current
@@ -1078,19 +921,6 @@ def _detect_active_provider_index(providers: list, config: dict) -> int:
 def _configure_provider(provider: dict, config: dict):
     """Configure a single provider - prompt for API keys and set config."""
     env_vars = provider.get("env_vars", [])
-    managed_feature = provider.get("managed_nous_feature")
-
-    if provider.get("requires_nous_auth"):
-        features = get_nous_subscription_features(config)
-        if not features.nous_auth_present:
-            _print_warning(
-                "  Nous Subscription is only available after logging into Nous Portal."
-            )
-            return
-
-    # Set TTS provider in config if applicable
-    if provider.get("tts_provider"):
-        config.setdefault("tts", {})["provider"] = provider["tts_provider"]
 
     # Set browser cloud provider in config if applicable
     if "browser_provider" in provider:
@@ -1111,15 +941,6 @@ def _configure_provider(provider: dict, config: dict):
         if provider.get("post_setup"):
             _run_post_setup(provider["post_setup"])
         _print_success(f"  {provider['name']} - no configuration needed!")
-        if managed_feature:
-            _print_info(
-                "  Requests for this tool will be billed to your Nous subscription."
-            )
-            override_envs = provider.get("override_env_vars", [])
-            if any(get_env_value(env_var) for env_var in override_envs):
-                _print_warning(
-                    "  Direct credentials are still configured and may take precedence until you remove them from ~/.hermes/.env."
-                )
         return
 
     # Prompt for each required env var
@@ -1311,19 +1132,6 @@ def _configure_tool_category_for_reconfig(ts_key: str, cat: dict, config: dict):
 def _reconfigure_provider(provider: dict, config: dict):
     """Reconfigure a provider - update API keys."""
     env_vars = provider.get("env_vars", [])
-    managed_feature = provider.get("managed_nous_feature")
-
-    if provider.get("requires_nous_auth"):
-        features = get_nous_subscription_features(config)
-        if not features.nous_auth_present:
-            _print_warning(
-                "  Nous Subscription is only available after logging into Nous Portal."
-            )
-            return
-
-    if provider.get("tts_provider"):
-        config.setdefault("tts", {})["provider"] = provider["tts_provider"]
-        _print_success(f"  TTS provider set to: {provider['tts_provider']}")
 
     if "browser_provider" in provider:
         bp = provider["browser_provider"]
@@ -1343,15 +1151,6 @@ def _reconfigure_provider(provider: dict, config: dict):
         if provider.get("post_setup"):
             _run_post_setup(provider["post_setup"])
         _print_success(f"  {provider['name']} - no configuration needed!")
-        if managed_feature:
-            _print_info(
-                "  Requests for this tool will be billed to your Nous subscription."
-            )
-            override_envs = provider.get("override_env_vars", [])
-            if any(get_env_value(env_var) for env_var in override_envs):
-                _print_warning(
-                    "  Direct credentials are still configured and may take precedence until you remove them from ~/.hermes/.env."
-                )
         return
 
     for var in env_vars:
@@ -1496,31 +1295,13 @@ def tools_command(args=None, first_install: bool = False, config: dict = None):
                     )
                     print(color(f"  - {label}", Colors.RED))
 
-            auto_configured = apply_nous_managed_defaults(
-                config,
-                enabled_toolsets=new_enabled,
-            )
-            if managed_nous_tools_enabled():
-                for ts_key in sorted(auto_configured):
-                    label = next(
-                        (l for k, l, _ in CONFIGURABLE_TOOLSETS if k == ts_key), ts_key
-                    )
-                    print(
-                        color(
-                            f"  ✓ {label}: using your Nous subscription defaults",
-                            Colors.GREEN,
-                        )
-                    )
-
             # Walk through ALL selected tools that have provider options or
             # need API keys.  This ensures browser (Local vs Browserbase),
-            # TTS (Edge vs OpenAI vs ElevenLabs), etc. are shown even when
-            # a free provider exists.
+            # etc. are shown even when a free provider exists.
             to_configure = [
                 ts_key
                 for ts_key in sorted(new_enabled)
                 if (TOOL_CATEGORIES.get(ts_key) or TOOLSET_ENV_REQUIREMENTS.get(ts_key))
-                and ts_key not in auto_configured
             ]
 
             if to_configure:
