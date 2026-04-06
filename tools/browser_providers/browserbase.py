@@ -9,7 +9,6 @@ from typing import Any, Dict, Optional
 import requests
 
 from tools.browser_providers.base import CloudBrowserProvider
-from tools.managed_tool_gateway import resolve_managed_tool_gateway
 from tools.tool_backend_helpers import managed_nous_tools_enabled
 
 logger = logging.getLogger(__name__)
@@ -76,27 +75,17 @@ class BrowserbaseProvider(CloudBrowserProvider):
             return {
                 "api_key": api_key,
                 "project_id": project_id,
-                "base_url": os.environ.get("BROWSERBASE_BASE_URL", "https://api.browserbase.com").rstrip("/"),
+                "base_url": os.environ.get(
+                    "BROWSERBASE_BASE_URL", "https://api.browserbase.com"
+                ).rstrip("/"),
                 "managed_mode": False,
             }
-
-        managed = resolve_managed_tool_gateway("browserbase")
-        if managed is None:
-            return None
-
-        return {
-            "api_key": managed.nous_user_token,
-            "project_id": "managed",
-            "base_url": managed.gateway_origin.rstrip("/"),
-            "managed_mode": True,
-        }
+        return None
 
     def _get_config(self) -> Dict[str, Any]:
         config = self._get_config_or_none()
         if config is None:
-            message = (
-                "Browserbase requires direct BROWSERBASE_API_KEY/BROWSERBASE_PROJECT_ID credentials."
-            )
+            message = "Browserbase requires direct BROWSERBASE_API_KEY/BROWSERBASE_PROJECT_ID credentials."
             if managed_nous_tools_enabled():
                 message = (
                     "Browserbase requires either direct BROWSERBASE_API_KEY/BROWSERBASE_PROJECT_ID "
@@ -110,9 +99,15 @@ class BrowserbaseProvider(CloudBrowserProvider):
         managed_mode = bool(config.get("managed_mode"))
 
         # Optional env-var knobs
-        enable_proxies = os.environ.get("BROWSERBASE_PROXIES", "true").lower() != "false"
-        enable_advanced_stealth = os.environ.get("BROWSERBASE_ADVANCED_STEALTH", "false").lower() == "true"
-        enable_keep_alive = os.environ.get("BROWSERBASE_KEEP_ALIVE", "true").lower() != "false"
+        enable_proxies = (
+            os.environ.get("BROWSERBASE_PROXIES", "true").lower() != "false"
+        )
+        enable_advanced_stealth = (
+            os.environ.get("BROWSERBASE_ADVANCED_STEALTH", "false").lower() == "true"
+        )
+        enable_keep_alive = (
+            os.environ.get("BROWSERBASE_KEEP_ALIVE", "true").lower() != "false"
+        )
         custom_timeout_ms = os.environ.get("BROWSERBASE_SESSION_TIMEOUT")
 
         features_enabled = {
@@ -134,7 +129,9 @@ class BrowserbaseProvider(CloudBrowserProvider):
                 if timeout_val > 0:
                     session_config["timeout"] = timeout_val
             except ValueError:
-                logger.warning("Invalid BROWSERBASE_SESSION_TIMEOUT value: %s", custom_timeout_ms)
+                logger.warning(
+                    "Invalid BROWSERBASE_SESSION_TIMEOUT value: %s", custom_timeout_ms
+                )
 
         if enable_proxies:
             session_config["proxies"] = True
@@ -202,7 +199,9 @@ class BrowserbaseProvider(CloudBrowserProvider):
         if managed_mode:
             _clear_pending_create_key(task_id)
         session_name = f"hermes_{task_id}_{uuid.uuid4().hex[:8]}"
-        external_call_id = response.headers.get("x-external-call-id") if managed_mode else None
+        external_call_id = (
+            response.headers.get("x-external-call-id") if managed_mode else None
+        )
 
         if enable_proxies and not proxies_fallback:
             features_enabled["proxies"] = True
@@ -214,7 +213,11 @@ class BrowserbaseProvider(CloudBrowserProvider):
             features_enabled["custom_timeout"] = True
 
         feature_str = ", ".join(k for k, v in features_enabled.items() if v)
-        logger.info("Created Browserbase session %s with features: %s", session_name, feature_str)
+        logger.info(
+            "Created Browserbase session %s with features: %s",
+            session_name,
+            feature_str,
+        )
 
         return {
             "session_name": session_name,
@@ -228,7 +231,9 @@ class BrowserbaseProvider(CloudBrowserProvider):
         try:
             config = self._get_config()
         except ValueError:
-            logger.warning("Cannot close Browserbase session %s — missing credentials", session_id)
+            logger.warning(
+                "Cannot close Browserbase session %s — missing credentials", session_id
+            )
             return False
 
         try:
@@ -262,7 +267,10 @@ class BrowserbaseProvider(CloudBrowserProvider):
     def emergency_cleanup(self, session_id: str) -> None:
         config = self._get_config_or_none()
         if config is None:
-            logger.warning("Cannot emergency-cleanup Browserbase session %s — missing credentials", session_id)
+            logger.warning(
+                "Cannot emergency-cleanup Browserbase session %s — missing credentials",
+                session_id,
+            )
             return
         try:
             requests.post(
@@ -278,4 +286,6 @@ class BrowserbaseProvider(CloudBrowserProvider):
                 timeout=5,
             )
         except Exception as e:
-            logger.debug("Emergency cleanup failed for Browserbase session %s: %s", session_id, e)
+            logger.debug(
+                "Emergency cleanup failed for Browserbase session %s: %s", session_id, e
+            )
