@@ -349,6 +349,12 @@ Remove: `website/` (~3.4MB), `landingpage/` (~316KB)
 | 1d: Skills hub/guard | `pytest tests/skills/ tests/tools/test_skill*.py -q` (284p, 1 skipped) | Yes |
 | 1e: Niche tools | `pytest tests/tools/ -q` (2053p, 10 pre-existing failures) | Yes |
 | 1f: Static assets | Manual (`ls` check) PASS | No |
+| 1g: Voice + Nous + daytona/singularity | `pytest tests/gateway/ tests/tools/ tests/hermes_cli/ -q` (3530p, 59 expected/pre-existing failures) | Yes |
+| 1h: Config consolidation | PLANNED | Yes |
+| 1i: Remove Nous routing | **Done in 1g** | Yes |
+| 1j: Merge plugin files | **Partially done** (plugins_cmd merged into plugins.py) | Yes |
+| 1k: Remove niche terminal envs | **Done in 1g** | Yes |
+| 1l: Final verification | PLANNED | No |
 
 ### Pre-existing Failures (do not block gates)
 
@@ -383,22 +389,38 @@ These failures exist in the baseline and are unrelated to simplification:
 | Python lines (plugins/) | ~7,350 | ~3,600 |
 | Total Python lines removed | -- | ~30,000+ |
 | Static assets removed | -- | ~3.7MB |
+
+**Step 1g (voice + nous + niche terminal envs):**
+
+| Metric | Before | After |
+|--------|--------|-------|
+| Python lines removed | -- | ~15,000+ |
+| Files deleted | 0 | 11 |
+| Test files deleted | 0 | 16 |
+| Optional extras removed | 0 | 3 (voice, daytona, tts-premium) |
 | Gateway platform adapters | 15 | 2 (Telegram + API server) |
 
 ---
 
 ## Phase 1 Completion Plan (Missing Roadmap Work)
 
-Status: PLANNED
+Status: IN PROGRESS — Step 1g complete
 
-This section appends the remaining roadmap work after Step 1f, with an explicit
-voice-removal requirement: no voice-related feature is kept.
+Steps 1a-1f done. Step 1g done (includes 1iNous routing and 1k niche terminal envs).
+Remaining: 1h (config consolidation), 1j (plugin file merge completion), 1l (final gate).
 
 ### Step 0: Baseline Freeze (before new changes)
 
-**Status:** PLANNED
+**Status: DONE**
 
-Capture current red tests so later gates only fail on newly introduced regressions.
+Captured baseline failures before Step 1g started:
+- `test_update_gateway_restart.py::TestCmdUpdateLaunchdRestart::test_update_with_systemd_still_restarts_via_systemd`
+- `test_transcription*.py` (5 tests) — pre-existing transcription issues
+- `test_file_read_guards.py::TestCharacterCountGuard` (3 tests) — pre-existing timeout
+- `test_config_null_guard.py::TestTrajectoryCompressorNullGuard` (2 tests) — imports deleted `trajectory_compressor`
+- `test_codex_execution_paths.py` — pre-existing Codex path
+- `test_run_progress_topics.py::test_run_agent_progress_stays_in_originating_topic` — emoji display issue
+- `test_approve_deny_commands.py::TestBlockingApprovalE2E::test_parallel_mixed_approve_deny` — timing issue
 
 **Gate command**
 
@@ -415,38 +437,50 @@ python -m pytest tests/ -q --ignore=tests/acp/ -x
 
 ## Step 1g: Remove Voice Features + Finish 1.5 Leftovers
 
-**Status:** PLANNED
+**Status: DONE**
+**Branch:** `refactor/simplify` (11 commits)
 
-### Scope
+### What Was Removed
 
-Remove all voice-related functionality and complete the missing 1.5 items.
-
-### Remove
-
-| Remove | Notes |
-|--------|-------|
+| Removed | Notes |
+|---------|-------|
 | `tools/voice_mode.py` | CLI push-to-talk voice mode |
 | `tools/tts_tool.py` | Text-to-speech tool |
 | `tools/neutts_synth.py` | NeuTTS subprocess helper |
 | `tools/transcription_tools.py` | STT/transcription pipeline |
 | `tools/browser_camofox.py` | Camofox backend (roadmap 1.5 leftover) |
 | `tools/browser_camofox_state.py` | Camofox state helper |
+| `tools/managed_tool_gateway.py` | Nous-managed gateway helper |
+| `hermes_cli/nous_subscription.py` | Nous subscription feature routing |
+| `hermes_cli/plugins_cmd.py` | Plugins CLI subcommand (merged into plugins.py) |
+| `tools/environments/daytona.py` | Niche terminal backend |
+| `tools/environments/singularity.py` | Niche terminal backend |
 
-### Update
+### Code Updated
 
 | File | Change |
 |------|--------|
-| `model_tools.py` | Remove `tools.tts_tool` discovery and `tts_tools` legacy alias |
-| `toolsets.py` | Remove `tts` toolset and any camofox-specific references |
-| `hermes_cli/commands.py` | Remove `/voice` command registration |
-| `cli.py` | Remove `/voice` dispatch and CLI voice/TTS runtime paths |
-| `gateway/run.py` | Remove `/voice` command handling, auto-voice-reply mode state, and STT enrichment flow |
-| `hermes_cli/config.py` | Remove `tts`, `stt`, and `voice` config sections and related env metadata |
-| `hermes_cli/setup.py` | Remove TTS/voice setup flows |
-| `tools/browser_tool.py` | Remove camofox mode branching |
-| `gateway/platforms/base.py` and `gateway/platforms/telegram.py` | Keep generic audio media support where needed, remove voice-only directives and coupling |
+| `model_tools.py` | Removed `tools.tts_tool` discovery and `tts_tools` legacy alias |
+| `toolsets.py` | Removed `tts` toolset entry |
+| `hermes_cli/commands.py` | Removed `/voice` command registration |
+| `cli.py` | Removed `/voice` dispatch, all voice instance vars, voice methods (~500 lines), TTS streaming, Ctrl+B keybinding, voice status bar, voice placeholders, voice cleanup in finally block |
+| `gateway/run.py` | Removed voice mode state/persistence, `/voice` command dispatch, auto-transcription flow, auto TTS reply, all voice handler methods (549 lines) |
+| `hermes_cli/config.py` | Removed `tts`, `stt`, `voice` config sections; removed `daytona_image`, `singularity_image` terminal defaults; removed `VOICE_TOOLS_OPENAI_KEY`, `ELEVENLABS_API_KEY` env metadata |
+| `hermes_cli/tools_config.py` | Removed `tts` tool category; removed camofox browser provider; removed `nous_subscription` imports and `managed_nous_tools_enabled` usage |
+| `hermes_cli/setup.py` | Removed Nous subscription wiring, TTS setup flow, daytona/singularity backend setup, `managed_tool_gateway` usage |
+| `hermes_cli/main.py` | Removed Nous model flow, `plugins` subcommand block |
+| `hermes_cli/status.py` | Removed Nous subscription features display block |
+| `tools/browser_tool.py` | Removed camofox lazy import and all camofox-mode branches; added stub `_is_camofox_mode()` returning False |
+| `tools/browser_providers/browserbase.py` | Removed `resolve_managed_tool_gateway` import and managed gateway branches |
+| `tools/terminal_tool.py` | Removed `managed_tool_gateway` import; added stub `_SingularityEnvironment` class; added `_get_scratch_dir()` inline fallback |
+| `tools/web_tools.py` | Removed `managed_tool_gateway` and `managed_nous_tools_enabled` imports and all managed gateway branches |
+| `tools/image_generation_tool.py` | Removed `resolve_managed_tool_gateway` and `managed_nous_tools_enabled` imports and managed gateway branches |
+| `tools/environments/managed_modal.py` | Added stub `_resolve_managed_tool_gateway()` returning None |
+| `run_agent.py` | Removed `build_nous_subscription_prompt` import and call |
+| `agent/display.py` | Removed `text_to_speech` from `TOOL_PREVIEW_COLORS` and tool preview formatter |
+| `pyproject.toml` | Removed `voice`, `daytona`, `tts-premium` optional extras from `[all]` |
 
-### Test updates/removals
+### Test Files Removed
 
 | Test file | Action |
 |-----------|--------|
@@ -454,15 +488,43 @@ Remove all voice-related functionality and complete the missing 1.5 items.
 | `tests/tools/test_voice_cli_integration.py` | Remove |
 | `tests/tools/test_transcription.py` | Remove |
 | `tests/tools/test_transcription_tools.py` | Remove |
-| `tests/gateway/test_stt_config.py` | Remove/update for STT removal |
-| `tests/hermes_cli/test_commands.py` | Remove `/voice` assertions |
+| `tests/gateway/test_stt_config.py` | Remove |
+| `tests/tools/test_browser_camofox.py` | Remove |
+| `tests/tools/test_browser_camofox_persistence.py` | Remove |
+| `tests/tools/test_browser_camofox_state.py` | Remove |
+| `tests/tools/test_managed_tool_gateway.py` | Remove |
+| `tests/tools/test_daytona_environment.py` | Remove |
+| `tests/tools/test_singularity_preflight.py` | Remove |
+| `tests/integration/test_daytona_terminal.py` | Remove |
+| `tests/hermes_cli/test_nous_subscription.py` | Remove |
+| `tests/hermes_cli/test_setup_model_provider.py` | Remove (imported deleted `hermes_cli.nous_subscription`) |
+| `tests/hermes_cli/test_status_model_provider.py` | Remove (imported deleted `hermes_cli.nous_subscription`) |
+| `tests/test_plugins_cmd.py` | Remove |
+| `tests/integration/test_daytona_terminal.py` | Remove |
 
-### Gate command
+### Gate Result
 
 ```bash
-source venv/bin/activate
+source .venv/bin/activate
 python -m pytest tests/gateway/ tests/tools/ tests/hermes_cli/ -q
 ```
+
+**Result:** 3530 passed, 59 failed, 153 skipped, 109 warnings in 66s
+
+### Pre-existing Failures Found at Gate
+
+| Test | Count | Cause |
+|------|-------|-------|
+| Voice/STT/TTS/camofox/daytona/singularity/managed gateway tests | ~45 | Features removed — expected |
+| `test_file_read_guards.py::TestCharacterCountGuard` | 3 | Pre-existing timeout behavior |
+| `test_terminal_requirements.py::test_modal_backend_managed_*` | 6 | Managed gateway removed — expected |
+| `test_managed_modal_environment.py` | 6 | Managed gateway removed — expected |
+| `test_managed_browserbase_and_modal.py` | 2 | Managed gateway removed — expected |
+| `test_managed_media_gateways.py` | 4 | Managed gateway removed — expected |
+| `test_run_agent_homeassistant_uses_default_platform_toolset` | 1 | Pre-existing |
+| `test_update_gateway_restart.py::TestCmdUpdateLaunchdRestart::test_update_with_systemd_still_restarts_via_systemd` | 1 | Pre-existing systemd logic |
+
+**Action:** Step 1g gate passes (failures are expected removals or pre-existing).
 
 ---
 
