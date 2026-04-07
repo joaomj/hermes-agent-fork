@@ -1,7 +1,3 @@
-<p align="center">
-  <img src="assets/banner.png" alt="Hermes Agent" width="100%">
-</p>
-
 # Hermes Agent Fork
 
 <p align="center">
@@ -9,15 +5,15 @@
   <a href="https://github.com/NousResearch/hermes-agent"><img src="https://img.shields.io/badge/Fork%20of-Hermes%20Agent-blueviolet?style=for-the-badge" alt="Fork of Hermes Agent by Nous Research"></a>
 </p>
 
-A streamlined fork of [Hermes Agent](https://github.com/NousResearch/hermes-agent) by [Nous Research](https://nousresearch.com) -- simplified for use as a personal AI assistant. Roughly 30,000 lines of dead code, niche integrations, and vendor-specific infrastructure have been removed. The codebase is leaner, easier to maintain, and simpler to extend.
+A streamlined fork of [Hermes Agent](https://github.com/NousResearch/hermes-agent) by [Nous Research](https://nousresearch.com) -- simplified for use as a personal AI assistant. Roughly 45,000 lines of dead code, niche integrations, voice/TTS subsystems, and vendor-specific infrastructure have been removed. The codebase is leaner, easier to maintain, and simpler to extend.
 
 Use any model you want -- [OpenRouter](https://openrouter.ai) (200+ models), [z.ai/GLM](https://z.ai), [Kimi/Moonshot](https://platform.moonshot.ai), [MiniMax](https://www.minimax.io), OpenAI, Anthropic, or your own endpoint. Switch with `hermes model` -- no code changes, no lock-in.
 
 <table>
 <tr><td><b>A real terminal interface</b></td><td>Full TUI with multiline editing, slash-command autocomplete, conversation history, interrupt-and-redirect, and streaming tool output.</td></tr>
-<tr><td><b>Telegram + API gateway</b></td><td>Telegram bot and API server from a single gateway process. Voice memo transcription, conversation continuity.</td></tr>
+<tr><td><b>Telegram + API gateway</b></td><td>Telegram bot and API server from a single gateway process. Cross-platform conversation continuity.</td></tr>
 <tr><td><b>Local skills and memory</b></td><td>Agent-curated memory with periodic nudges. Autonomous skill creation from experience. FTS5 session search with LLM summarization for cross-session recall. <a href="https://github.com/plastic-labs/honcho">Honcho</a> dialectic user modeling. Local-only skill loading.</td></tr>
-<tr><td><b>Scheduled automations</b></td><td>Built-in cron scheduler. Daily reports, nightly backups, weekly audits -- all in natural language, running unattended.</td></tr>
+<tr><td><b>Scheduled automations</b></td><td>Cron scheduler (opt-in toolset). Daily reports, nightly backups, weekly audits -- all in natural language, running unattended.</td></tr>
 <tr><td><b>Delegates and parallelizes</b></td><td>Spawn isolated subagents for parallel workstreams. Write Python scripts that call tools via RPC, collapsing multi-step pipelines into zero-context-cost turns.</td></tr>
 <tr><td><b>Runs anywhere</b></td><td>Terminal backends: local, Docker, SSH, and Modal. Run it on a $5 VPS or a GPU cluster.</td></tr>
 </table>
@@ -26,19 +22,23 @@ Use any model you want -- [OpenRouter](https://openrouter.ai) (200+ models), [z.
 
 ## What Changed from Upstream
 
-This fork completed a [simplification refactor](docs/roadmap.md) (Phase 1) that removed roughly 30,000 lines:
+This fork completed a [simplification refactor](docs/roadmap.md) (Phase 1) across 14 commits:
 
-| Removed | Lines | Reason |
-|---------|-------|--------|
-| RL training subsystem (Atropos) | ~11,700 | Self-contained, no connection to core agent |
-| Gateway adapters (Discord, Slack, WhatsApp, Signal, Matrix, etc.) | ~12,200 | Only Telegram + API server kept |
-| Memory plugins (kept Honcho only) | ~3,000 | Consolidated to single provider |
-| Skills marketplace/hub infrastructure | ~4,000 | Local-only skill loading |
-| Niche tools from core (MoA, image gen, Home Assistant, etc.) | ~3,200 | Moved to opt-in toolsets or removed |
-| Static assets (website, landing page) | ~3.7MB | Separate projects |
-| Nous-specific routing and vendor infrastructure | -- | Not applicable to a personal fork |
+| Removed | Lines | Step |
+|---------|-------|------|
+| RL training subsystem (Atropos, batch runner, trajectory compressor) | ~11,700 | 1a |
+| Gateway adapters (Discord, Slack, WhatsApp, Signal, Matrix, Feishu, WeChat, DingTalk, Mattermost, Email, SMS, Home Assistant, Webhook) | ~12,200 | 1b |
+| Memory plugins (holographic, openviking, hindsight, mem0, byterover, retaindb) | ~3,000 | 1c |
+| Skills marketplace/hub and security scanner | ~4,000 | 1d |
+| Mixture-of-agents tool; moved image gen, TTS, cron, Home Assistant to opt-in toolsets | ~3,200 | 1e |
+| Static assets (website, landing page) | ~3.7MB | 1f |
+| Voice mode, TTS, STT/transcription, Camofox browser backend | ~15,000+ | 1g |
+| Nous-managed tool gateway and subscription routing | -- | 1g |
+| Daytona and Singularity terminal backends | -- | 1g |
 
-See the full [roadmap](docs/roadmap.md) for completed and planned phases.
+Steps 1h (config consolidation) and 1j (plugin file merge) were analyzed and deferred -- too risky without a dedicated spec.
+
+See the full [roadmap](docs/roadmap.md) and [simplification plan](docs/simplification-plan.md) for details.
 
 ---
 
@@ -48,9 +48,7 @@ See the full [roadmap](docs/roadmap.md) for completed and planned phases.
 curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash
 ```
 
-Works on Linux, macOS, and WSL2. The installer handles everything -- Python, Node.js, dependencies, and the `hermes` command. No prerequisites except git.
-
-> **Windows:** Native Windows is not supported. Please install [WSL2](https://learn.microsoft.com/en-us/windows/wsl/install) and run the command above.
+Works on Linux and macOS. The installer handles everything -- Python, Node.js, dependencies, and the `hermes` command. No prerequisites except git.
 
 After installation:
 
@@ -96,7 +94,7 @@ Hermes has two entry points: start the terminal UI with `hermes`, or run the gat
 
 | Phase | Description | Status |
 |-------|-------------|--------|
-| 1. Simplification Refactor | Remove ~30k lines of dead/niche code | Completed |
+| 1. Simplification Refactor | Remove ~45k lines of dead/niche code, voice, TTS, vendor infrastructure | Completed |
 | 2. Unified Knowledge Base | Filesystem-first knowledge layer (markdown + FTS5) | Planning |
 | 3. Deep Research Tool | Multi-step research with source trust hierarchy | Planning |
 | 4. Rust Port | Full Python-to-Rust rewrite (long-term) | Long-term |
