@@ -5,9 +5,11 @@
 ## Phase 1: Simplification Refactor
 
 **Branch:** `refactor/simplify`
-**Status:** Planning
+**Status:** Completed
 
 Remove unnecessary interfaces, integrations, and dead code to reduce the codebase by ~30,000 lines. A leaner codebase is easier to maintain, test, and port. Run this first -- work on a smaller surface.
+
+Implemented through steps 1a-1g. Steps 1h and 1j were analyzed and deferred for future follow-up.
 
 ### 1.1 Remove RL Training Subsystem (~11,700 lines)
 
