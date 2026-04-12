@@ -915,16 +915,6 @@ install_node_deps() {
         esac
         log_success "Browser engine installed"
     fi
-
-    # Install WhatsApp bridge dependencies
-    if [ -f "$INSTALL_DIR/scripts/whatsapp-bridge/package.json" ]; then
-        log_info "Installing WhatsApp bridge dependencies..."
-        cd "$INSTALL_DIR/scripts/whatsapp-bridge"
-        npm install --silent 2>/dev/null || {
-            log_warn "WhatsApp bridge npm install failed (WhatsApp may not work)"
-        }
-        log_success "WhatsApp bridge dependencies installed"
-    fi
 }
 
 run_setup_wizard() {

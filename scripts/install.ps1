@@ -721,20 +721,6 @@ function Install-NodeDeps {
         }
     }
     
-    # Install WhatsApp bridge dependencies
-    $bridgeDir = "$InstallDir\scripts\whatsapp-bridge"
-    if (Test-Path "$bridgeDir\package.json") {
-        Write-Info "Installing WhatsApp bridge dependencies..."
-        Push-Location $bridgeDir
-        try {
-            npm install --silent 2>&1 | Out-Null
-            Write-Success "WhatsApp bridge dependencies installed"
-        } catch {
-            Write-Warn "WhatsApp bridge npm install failed (WhatsApp may not work)"
-        }
-        Pop-Location
-    }
-    
     Pop-Location
 }
 
