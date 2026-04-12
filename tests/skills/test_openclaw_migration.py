@@ -8,7 +8,7 @@ from pathlib import Path
 
 SCRIPT_PATH = (
     Path(__file__).resolve().parents[2]
-    / "optional-skills"
+    / "_optional-skills-available"
     / "migration"
     / "openclaw-migration"
     / "scripts"

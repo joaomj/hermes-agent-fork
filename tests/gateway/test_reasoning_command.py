@@ -15,7 +15,9 @@ from gateway.platforms.base import MessageEvent
 from gateway.session import SessionSource
 
 
-def _make_event(text="/reasoning", platform=Platform.TELEGRAM, user_id="12345", chat_id="67890"):
+def _make_event(
+    text="/reasoning", platform=Platform.TELEGRAM, user_id="12345", chat_id="67890"
+):
     """Build a MessageEvent for testing."""
     source = SessionSource(
         platform=platform,
@@ -54,7 +56,9 @@ class _CapturingAgent:
         type(self).last_init = dict(kwargs)
         self.tools = []
 
-    def run_conversation(self, user_message: str, conversation_history=None, task_id=None):
+    def run_conversation(
+        self, user_message: str, conversation_history=None, task_id=None
+    ):
         return {
             "final_response": "ok",
             "messages": [],
@@ -77,7 +81,9 @@ class TestReasoningCommand:
         assert '"reasoning"' in source
 
     @pytest.mark.asyncio
-    async def test_reasoning_command_reloads_current_state_from_config(self, tmp_path, monkeypatch):
+    async def test_reasoning_command_reloads_current_state_from_config(
+        self, tmp_path, monkeypatch
+    ):
         hermes_home = tmp_path / "hermes"
         hermes_home.mkdir()
         config_path = hermes_home / "config.yaml"
@@ -101,7 +107,9 @@ class TestReasoningCommand:
         assert runner._show_reasoning is True
 
     @pytest.mark.asyncio
-    async def test_handle_reasoning_command_updates_config_and_cache(self, tmp_path, monkeypatch):
+    async def test_handle_reasoning_command_updates_config_and_cache(
+        self, tmp_path, monkeypatch
+    ):
         hermes_home = tmp_path / "hermes"
         hermes_home.mkdir()
         config_path = hermes_home / "config.yaml"
@@ -120,10 +128,14 @@ class TestReasoningCommand:
         assert runner._reasoning_config == {"enabled": True, "effort": "low"}
         assert "takes effect on next message" in result
 
-    def test_run_agent_reloads_reasoning_config_per_message(self, tmp_path, monkeypatch):
+    def test_run_agent_reloads_reasoning_config_per_message(
+        self, tmp_path, monkeypatch
+    ):
         hermes_home = tmp_path / "hermes"
         hermes_home.mkdir()
-        (hermes_home / "config.yaml").write_text("agent:\n  reasoning_effort: low\n", encoding="utf-8")
+        (hermes_home / "config.yaml").write_text(
+            "agent:\n  reasoning_effort: low\n", encoding="utf-8"
+        )
 
         monkeypatch.setattr(gateway_run, "_hermes_home", hermes_home)
         monkeypatch.setattr(gateway_run, "_env_path", hermes_home / ".env")
@@ -168,12 +180,19 @@ class TestReasoningCommand:
 
         assert result["final_response"] == "ok"
         assert _CapturingAgent.last_init is not None
-        assert _CapturingAgent.last_init["reasoning_config"] == {"enabled": True, "effort": "low"}
+        assert _CapturingAgent.last_init["reasoning_config"] == {
+            "enabled": True,
+            "effort": "low",
+        }
 
-    def test_run_agent_prefers_config_over_stale_reasoning_env(self, tmp_path, monkeypatch):
+    def test_run_agent_prefers_config_over_stale_reasoning_env(
+        self, tmp_path, monkeypatch
+    ):
         hermes_home = tmp_path / "hermes"
         hermes_home.mkdir()
-        (hermes_home / "config.yaml").write_text("agent:\n  reasoning_effort: none\n", encoding="utf-8")
+        (hermes_home / "config.yaml").write_text(
+            "agent:\n  reasoning_effort: none\n", encoding="utf-8"
+        )
 
         monkeypatch.setattr(gateway_run, "_hermes_home", hermes_home)
         monkeypatch.setattr(gateway_run, "_env_path", hermes_home / ".env")
@@ -219,7 +238,9 @@ class TestReasoningCommand:
         assert _CapturingAgent.last_init is not None
         assert _CapturingAgent.last_init["reasoning_config"] == {"enabled": False}
 
-    def test_run_agent_includes_enabled_mcp_servers_in_gateway_toolsets(self, tmp_path, monkeypatch):
+    def test_run_agent_includes_enabled_mcp_servers_in_gateway_toolsets(
+        self, tmp_path, monkeypatch
+    ):
         hermes_home = tmp_path / "hermes"
         hermes_home.mkdir()
         (hermes_home / "config.yaml").write_text(
@@ -280,7 +301,9 @@ class TestReasoningCommand:
         assert "exa" in enabled_toolsets
         assert "web-search-prime" in enabled_toolsets
 
-    def test_run_agent_homeassistant_uses_default_platform_toolset(self, tmp_path, monkeypatch):
+    def test_run_agent_api_server_uses_default_platform_toolset(
+        self, tmp_path, monkeypatch
+    ):
         hermes_home = tmp_path / "hermes"
         hermes_home.mkdir()
         (hermes_home / "config.yaml").write_text("", encoding="utf-8")
@@ -306,9 +329,9 @@ class TestReasoningCommand:
         runner = _make_runner()
 
         source = SessionSource(
-            platform=Platform.HOMEASSISTANT,
-            chat_id="ha",
-            chat_name="Home Assistant",
+            platform=Platform.API_SERVER,
+            chat_id="api",
+            chat_name="API Server",
             chat_type="dm",
             user_id="user-1",
         )
@@ -320,10 +343,12 @@ class TestReasoningCommand:
                 history=[],
                 source=source,
                 session_id="session-1",
-                session_key="agent:main:homeassistant:dm",
+                session_key="agent:main:api_server:dm",
             )
         )
 
         assert result["final_response"] == "ok"
         assert _CapturingAgent.last_init is not None
-        assert "homeassistant" in set(_CapturingAgent.last_init["enabled_toolsets"])
+        enabled_toolsets = set(_CapturingAgent.last_init["enabled_toolsets"])
+        assert "web" in enabled_toolsets
+        assert "terminal" in enabled_toolsets

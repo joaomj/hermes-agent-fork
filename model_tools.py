@@ -5,13 +5,12 @@ Model Tools Module
 Thin orchestration layer over the tool registry. Each tool file in tools/
 self-registers its schema, handler, and metadata via tools.registry.register().
 This module triggers discovery (by importing all tool modules), then provides
-the public API that run_agent.py, cli.py, batch_runner.py, and the RL
-environments consume.
+the public API that run_agent.py, cli.py, and the gateway consume.
 
 Public API (signatures preserved from the original 2,400-line version):
     get_tool_definitions(enabled_toolsets, disabled_toolsets, quiet_mode) -> list
     handle_function_call(function_name, function_args, task_id, user_task) -> str
-    TOOL_TO_TOOLSET_MAP: dict          (for batch_runner.py)
+    TOOL_TO_TOOLSET_MAP: dict          (for toolset lookups)
     TOOLSET_REQUIREMENTS: dict         (for cli.py, doctor.py)
     get_all_tool_names() -> list
     get_toolset_for_tool(name) -> str
@@ -82,8 +81,7 @@ def _run_async(coro):
     """Run an async coroutine from a sync context.
 
     If the current thread already has a running event loop (e.g., inside
-    the gateway's async stack or Atropos's event loop), we spin up a
-    disposable thread so asyncio.run() can create its own loop without
+    the gateway's async stack), we spin up a disposable thread so asyncio.run() can create its own loop without
     conflicting.
 
     For the common CLI path (no running loop), we use a persistent event
@@ -96,9 +94,7 @@ def _run_async(coro):
     asyncio.run()'s create-and-destroy lifecycle.
 
     This is the single source of truth for sync->async bridging in tool
-    handlers. The RL paths (agent_loop.py, tool_context.py) also provide
-    outer thread-pool wrapping as defense-in-depth, but each handler is
-    self-protecting via this function.
+    handlers.
     """
     try:
         loop = asyncio.get_running_loop()
@@ -223,18 +219,6 @@ _LEGACY_TOOLSET_MAP = {
         "browser_console",
     ],
     "cronjob_tools": ["cronjob"],
-    "rl_tools": [
-        "rl_list_environments",
-        "rl_select_environment",
-        "rl_get_current_config",
-        "rl_edit_config",
-        "rl_start_training",
-        "rl_check_status",
-        "rl_stop_training",
-        "rl_get_results",
-        "rl_list_runs",
-        "rl_test_inference",
-    ],
     "file_tools": ["read_file", "write_file", "patch", "search_files"],
 }
 

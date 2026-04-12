@@ -17,6 +17,7 @@ from model_tools import (
 # handle_function_call
 # =========================================================================
 
+
 class TestHandleFunctionCall:
     def test_agent_loop_tool_returns_error(self):
         for tool_name in _AGENT_LOOP_TOOLS:
@@ -43,6 +44,7 @@ class TestHandleFunctionCall:
 # Agent loop tools
 # =========================================================================
 
+
 class TestAgentLoopTools:
     def test_expected_tools_in_set(self):
         assert "todo" in _AGENT_LOOP_TOOLS
@@ -59,12 +61,18 @@ class TestAgentLoopTools:
 # Legacy toolset map
 # =========================================================================
 
+
 class TestLegacyToolsetMap:
     def test_expected_legacy_names(self):
         expected = [
-            "web_tools", "terminal_tools", "vision_tools", "moa_tools",
-            "image_tools", "skills_tools", "browser_tools", "cronjob_tools",
-            "rl_tools", "file_tools", "tts_tools",
+            "web_tools",
+            "terminal_tools",
+            "vision_tools",
+            "image_tools",
+            "skills_tools",
+            "browser_tools",
+            "cronjob_tools",
+            "file_tools",
         ]
         for name in expected:
             assert name in _LEGACY_TOOLSET_MAP, f"Missing legacy toolset: {name}"
@@ -79,6 +87,7 @@ class TestLegacyToolsetMap:
 # =========================================================================
 # Backward-compat wrappers
 # =========================================================================
+
 
 class TestBackwardCompat:
     def test_get_all_tool_names_returns_list(self):

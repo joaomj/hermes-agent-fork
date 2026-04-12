@@ -74,7 +74,7 @@ Strip to local-only skill loading. Remove the marketplace/hub infrastructure:
 | `tools/skills_guard.py` | 1,105 | Security scanner for community skills |
 | `hermes_cli/skills_hub.py` | 1,219 | CLI `/skills` marketplace command |
 
-Keep: `tools/skills_tool.py` (agent reads local skills), `tools/skill_manager_tool.py` (agent creates skills), `tools/skills_sync.py` (manifest sync), `agent/skill_commands.py` (slash commands), local `skills/` and `optional-skills/` directories.
+Keep: `tools/skills_tool.py` (agent reads local skills), `tools/skill_manager_tool.py` (agent creates skills), `tools/skills_sync.py` (manifest sync), `agent/skill_commands.py` (slash commands), local `~/.hermes/skills/`, plus bundled `_skills-available/` and `_optional-skills-available/` directories.
 
 ### 1.5 Remove Niche Tools from Core (~3,200 lines from tool schemas)
 

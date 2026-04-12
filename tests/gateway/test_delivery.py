@@ -13,8 +13,8 @@ class TestParseTargetPlatformChat:
         assert target.is_explicit is True
 
     def test_platform_only_no_chat_id(self):
-        target = DeliveryTarget.parse("discord")
-        assert target.platform == Platform.DISCORD
+        target = DeliveryTarget.parse("telegram")
+        assert target.platform == Platform.TELEGRAM
         assert target.chat_id is None
         assert target.is_explicit is False
 
@@ -24,7 +24,9 @@ class TestParseTargetPlatformChat:
         assert target.chat_id is None
 
     def test_origin_with_source(self):
-        origin = SessionSource(platform=Platform.TELEGRAM, chat_id="789", thread_id="42")
+        origin = SessionSource(
+            platform=Platform.TELEGRAM, chat_id="789", thread_id="42"
+        )
         target = DeliveryTarget.parse("origin", origin=origin)
         assert target.platform == Platform.TELEGRAM
         assert target.chat_id == "789"
@@ -65,7 +67,9 @@ class TestParseDeliverSpec:
 
 class TestTargetToStringRoundtrip:
     def test_origin_roundtrip(self):
-        origin = SessionSource(platform=Platform.TELEGRAM, chat_id="111", thread_id="42")
+        origin = SessionSource(
+            platform=Platform.TELEGRAM, chat_id="111", thread_id="42"
+        )
         target = DeliveryTarget.parse("origin", origin=origin)
         assert target.to_string() == "origin"
 
@@ -74,8 +78,8 @@ class TestTargetToStringRoundtrip:
         assert target.to_string() == "local"
 
     def test_platform_only_roundtrip(self):
-        target = DeliveryTarget.parse("discord")
-        assert target.to_string() == "discord"
+        target = DeliveryTarget.parse("telegram")
+        assert target.to_string() == "telegram"
 
     def test_explicit_chat_roundtrip(self):
         target = DeliveryTarget.parse("telegram:999")

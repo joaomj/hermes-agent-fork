@@ -269,13 +269,6 @@ DEFAULT_CONFIG = {
         "command_timeout": 30,  # Timeout for browser commands in seconds (screenshot, navigate, etc.)
         "record_sessions": False,  # Auto-record browser sessions as WebM videos
         "allow_private_urls": False,  # Allow navigating to private/internal IPs (localhost, 192.168.x.x, etc.)
-        "camofox": {
-            # When true, Hermes sends a stable profile-scoped userId to Camofox
-            # so the server can map it to a persistent browser profile directory.
-            # Requires Camofox server to be configured with CAMOFOX_PROFILE_DIR.
-            # When false (default), each session gets a random userId (ephemeral).
-            "managed_persistence": False,
-        },
     },
     # Filesystem checkpoints — automatic snapshots before destructive file ops.
     # When enabled, the agent takes a snapshot of the working directory once per
@@ -333,13 +326,6 @@ DEFAULT_CONFIG = {
             "timeout": 120,  # seconds — compression summarises large contexts; increase for local models
         },
         "session_search": {
-            "provider": "auto",
-            "model": "",
-            "base_url": "",
-            "api_key": "",
-            "timeout": 30,
-        },
-        "skills_hub": {
             "provider": "auto",
             "model": "",
             "base_url": "",
@@ -787,14 +773,6 @@ OPTIONAL_ENV_VARS = {
         "url": "https://browser-use.com/",
         "tools": ["browser_navigate", "browser_click"],
         "password": True,
-        "category": "tool",
-    },
-    "CAMOFOX_URL": {
-        "description": "Camofox browser server URL for local anti-detection browsing (e.g. http://localhost:9377)",
-        "prompt": "Camofox server URL",
-        "url": "https://github.com/jo-inc/camofox-browser",
-        "tools": ["browser_navigate", "browser_click"],
-        "password": False,
         "category": "tool",
     },
     "FAL_KEY": {

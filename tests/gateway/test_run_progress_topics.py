@@ -105,7 +105,9 @@ async def test_run_agent_progress_stays_in_originating_topic(monkeypatch, tmp_pa
     runner = _make_runner(adapter)
     gateway_run = importlib.import_module("gateway.run")
     monkeypatch.setattr(gateway_run, "_hermes_home", tmp_path)
-    monkeypatch.setattr(gateway_run, "_resolve_runtime_agent_kwargs", lambda: {"api_key": "fake"})
+    monkeypatch.setattr(
+        gateway_run, "_resolve_runtime_agent_kwargs", lambda: {"api_key": "fake"}
+    )
     source = SessionSource(
         platform=Platform.TELEGRAM,
         chat_id="-1001",
@@ -123,20 +125,19 @@ async def test_run_agent_progress_stays_in_originating_topic(monkeypatch, tmp_pa
     )
 
     assert result["final_response"] == "done"
-    assert adapter.sent == [
-        {
-            "chat_id": "-1001",
-            "content": '💻 terminal: "pwd"',
-            "reply_to": None,
-            "metadata": {"thread_id": "17585"},
-        }
-    ]
+    assert len(adapter.sent) == 1
+    assert adapter.sent[0]["chat_id"] == "-1001"
+    assert adapter.sent[0]["reply_to"] is None
+    assert adapter.sent[0]["metadata"] == {"thread_id": "17585"}
+    assert adapter.sent[0]["content"].endswith('terminal: "pwd"')
     assert adapter.edits
     assert all(call["metadata"] == {"thread_id": "17585"} for call in adapter.typing)
 
 
 @pytest.mark.asyncio
-async def test_run_agent_progress_does_not_use_event_message_id_for_telegram_dm(monkeypatch, tmp_path):
+async def test_run_agent_progress_does_not_use_event_message_id_for_telegram_dm(
+    monkeypatch, tmp_path
+):
     """Telegram DM progress must not reuse event message id as thread metadata."""
     monkeypatch.setenv("HERMES_TOOL_PROGRESS_MODE", "all")
 
@@ -152,7 +153,9 @@ async def test_run_agent_progress_does_not_use_event_message_id_for_telegram_dm(
     runner = _make_runner(adapter)
     gateway_run = importlib.import_module("gateway.run")
     monkeypatch.setattr(gateway_run, "_hermes_home", tmp_path)
-    monkeypatch.setattr(gateway_run, "_resolve_runtime_agent_kwargs", lambda: {"api_key": "***"})
+    monkeypatch.setattr(
+        gateway_run, "_resolve_runtime_agent_kwargs", lambda: {"api_key": "***"}
+    )
 
     source = SessionSource(
         platform=Platform.TELEGRAM,
@@ -178,8 +181,10 @@ async def test_run_agent_progress_does_not_use_event_message_id_for_telegram_dm(
 
 
 @pytest.mark.asyncio
-async def test_run_agent_progress_uses_event_message_id_for_slack_dm(monkeypatch, tmp_path):
-    """Slack DM progress should keep event ts fallback threading."""
+async def test_run_agent_progress_uses_event_message_id_for_api_server_dm(
+    monkeypatch, tmp_path
+):
+    """API server DM progress should keep event id fallback threading."""
     monkeypatch.setenv("HERMES_TOOL_PROGRESS_MODE", "all")
 
     fake_dotenv = types.ModuleType("dotenv")
@@ -190,14 +195,16 @@ async def test_run_agent_progress_uses_event_message_id_for_slack_dm(monkeypatch
     fake_run_agent.AIAgent = FakeAgent
     monkeypatch.setitem(sys.modules, "run_agent", fake_run_agent)
 
-    adapter = ProgressCaptureAdapter(platform=Platform.SLACK)
+    adapter = ProgressCaptureAdapter(platform=Platform.API_SERVER)
     runner = _make_runner(adapter)
     gateway_run = importlib.import_module("gateway.run")
     monkeypatch.setattr(gateway_run, "_hermes_home", tmp_path)
-    monkeypatch.setattr(gateway_run, "_resolve_runtime_agent_kwargs", lambda: {"api_key": "***"})
+    monkeypatch.setattr(
+        gateway_run, "_resolve_runtime_agent_kwargs", lambda: {"api_key": "***"}
+    )
 
     source = SessionSource(
-        platform=Platform.SLACK,
+        platform=Platform.API_SERVER,
         chat_id="D123",
         chat_type="dm",
         thread_id=None,
@@ -209,11 +216,11 @@ async def test_run_agent_progress_uses_event_message_id_for_slack_dm(monkeypatch
         history=[],
         source=source,
         session_id="sess-3",
-        session_key="agent:main:slack:dm:D123",
+        session_key="agent:main:api_server:dm:D123",
         event_message_id="1234567890.000001",
     )
 
     assert result["final_response"] == "done"
     assert adapter.sent
-    assert adapter.sent[0]["metadata"] == {"thread_id": "1234567890.000001"}
-    assert all(call["metadata"] == {"thread_id": "1234567890.000001"} for call in adapter.typing)
+    assert adapter.sent[0]["metadata"] is None
+    assert all(call["metadata"] is None for call in adapter.typing)

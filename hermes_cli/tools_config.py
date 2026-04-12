@@ -111,14 +111,13 @@ CONFIGURABLE_TOOLSETS = [
         "⏰ Cron Jobs",
         "create/list/update/pause/resume/run, with optional attached skills",
     ),
-    ("rl", "🧪 RL Training", "Tinker-Atropos training tools"),
     ("homeassistant", "🏠 Home Assistant", "smart home device control"),
 ]
 
 # Toolsets that are OFF by default for new installs.
 # They're still in _HERMES_CORE_TOOLS (available at runtime if enabled),
 # but the setup checklist won't pre-select them for first-time users.
-_DEFAULT_OFF_TOOLSETS = {"homeassistant", "rl"}
+_DEFAULT_OFF_TOOLSETS = {"homeassistant"}
 
 
 def _get_effective_configurable_toolsets():
@@ -153,22 +152,7 @@ def _get_plugin_toolset_keys() -> set:
 PLATFORMS = {
     "cli": {"label": "🖥️  CLI", "default_toolset": "hermes-cli"},
     "telegram": {"label": "📱 Telegram", "default_toolset": "hermes-telegram"},
-    "discord": {"label": "💬 Discord", "default_toolset": "hermes-discord"},
-    "slack": {"label": "💼 Slack", "default_toolset": "hermes-slack"},
-    "whatsapp": {"label": "📱 WhatsApp", "default_toolset": "hermes-whatsapp"},
-    "signal": {"label": "📡 Signal", "default_toolset": "hermes-signal"},
-    "homeassistant": {
-        "label": "🏠 Home Assistant",
-        "default_toolset": "hermes-homeassistant",
-    },
-    "email": {"label": "📧 Email", "default_toolset": "hermes-email"},
-    "matrix": {"label": "💬 Matrix", "default_toolset": "hermes-matrix"},
-    "dingtalk": {"label": "💬 DingTalk", "default_toolset": "hermes-dingtalk"},
-    "feishu": {"label": "🪽 Feishu", "default_toolset": "hermes-feishu"},
-    "wecom": {"label": "💬 WeCom", "default_toolset": "hermes-wecom"},
     "api_server": {"label": "🌐 API Server", "default_toolset": "hermes-api-server"},
-    "mattermost": {"label": "💬 Mattermost", "default_toolset": "hermes-mattermost"},
-    "webhook": {"label": "🔗 Webhook", "default_toolset": "hermes-webhook"},
 }
 
 
@@ -376,12 +360,6 @@ def _get_enabled_platforms() -> List[str]:
     enabled = ["cli"]
     if get_env_value("TELEGRAM_BOT_TOKEN"):
         enabled.append("telegram")
-    if get_env_value("DISCORD_BOT_TOKEN"):
-        enabled.append("discord")
-    if get_env_value("SLACK_BOT_TOKEN"):
-        enabled.append("slack")
-    if get_env_value("WHATSAPP_ENABLED"):
-        enabled.append("whatsapp")
     return enabled
 
 

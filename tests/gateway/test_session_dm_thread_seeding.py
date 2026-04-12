@@ -34,7 +34,9 @@ def store(tmp_path):
     return s
 
 
-def _dm_source(platform=Platform.SLACK, chat_id="D123", thread_id=None, user_id="U1"):
+def _dm_source(
+    platform=Platform.TELEGRAM, chat_id="D123", thread_id=None, user_id="U1"
+):
     return SessionSource(
         platform=platform,
         chat_id=chat_id,
@@ -44,7 +46,9 @@ def _dm_source(platform=Platform.SLACK, chat_id="D123", thread_id=None, user_id=
     )
 
 
-def _group_source(platform=Platform.SLACK, chat_id="C456", thread_id=None, user_id="U1"):
+def _group_source(
+    platform=Platform.TELEGRAM, chat_id="C456", thread_id=None, user_id="U1"
+):
     return SessionSource(
         platform=platform,
         chat_id=chat_id,
@@ -91,9 +95,9 @@ class TestDMThreadSeeding:
         # Create thread and add a message to it
         thread_source = _dm_source(thread_id="1234567890.000001")
         thread_entry = store.get_or_create_session(thread_source)
-        store.append_to_transcript(thread_entry.session_id, {
-            "role": "user", "content": "thread-only message"
-        })
+        store.append_to_transcript(
+            thread_entry.session_id, {"role": "user", "content": "thread-only message"}
+        )
 
         # Parent should still have only its original messages
         parent_transcript = store.load_transcript(parent_entry.session_id)
@@ -110,9 +114,9 @@ class TestDMThreadSeeding:
         # Thread A
         thread_a_source = _dm_source(thread_id="1111.000001")
         thread_a_entry = store.get_or_create_session(thread_a_source)
-        store.append_to_transcript(thread_a_entry.session_id, {
-            "role": "user", "content": "thread A message"
-        })
+        store.append_to_transcript(
+            thread_a_entry.session_id, {"role": "user", "content": "thread A message"}
+        )
 
         # Thread B
         thread_b_source = _dm_source(thread_id="2222.000002")
@@ -137,14 +141,14 @@ class TestDMThreadSeeding:
         # Create thread session
         thread_source = _dm_source(thread_id="1234567890.000001")
         thread_entry = store.get_or_create_session(thread_source)
-        store.append_to_transcript(thread_entry.session_id, {
-            "role": "user", "content": "follow-up"
-        })
+        store.append_to_transcript(
+            thread_entry.session_id, {"role": "user", "content": "follow-up"}
+        )
 
         # Add more to parent after thread was created
-        store.append_to_transcript(parent_entry.session_id, {
-            "role": "user", "content": "new parent message"
-        })
+        store.append_to_transcript(
+            parent_entry.session_id, {"role": "user", "content": "new parent message"}
+        )
 
         # Get the same thread session again (not new — created_at != updated_at)
         thread_entry_again = store.get_or_create_session(thread_source)
@@ -205,7 +209,7 @@ class TestDMThreadSeedingEdgeCases:
 class TestDMThreadSeedingCrossPlatform:
     """Verify seeding works for platforms beyond Slack."""
 
-    @pytest.mark.parametrize("platform", [Platform.SLACK, Platform.TELEGRAM, Platform.DISCORD])
+    @pytest.mark.parametrize("platform", [Platform.TELEGRAM])
     def test_seeding_works_across_platforms(self, store, platform):
         """DM thread seeding should work for any platform that uses thread_id."""
         parent_source = _dm_source(platform=platform)

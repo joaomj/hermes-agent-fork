@@ -336,7 +336,7 @@ def _check_unavailable_skill(command_name: str) -> str | None:
         from hermes_constants import get_hermes_home, get_optional_skills_dir
 
         repo_root = Path(__file__).resolve().parent.parent
-        optional_dir = get_optional_skills_dir(repo_root / "optional-skills")
+        optional_dir = get_optional_skills_dir(repo_root / "_optional-skills-available")
         if optional_dir.exists():
             for skill_md in optional_dir.rglob("SKILL.md"):
                 name = skill_md.parent.name.lower().replace("_", "-")
@@ -384,11 +384,17 @@ def _resolve_gateway_model(config: dict | None = None) -> str:
     """
     cfg = config if config is not None else _load_gateway_config()
     model_cfg = cfg.get("model", {})
+    resolved = ""
     if isinstance(model_cfg, str):
-        return model_cfg
+        resolved = model_cfg
     elif isinstance(model_cfg, dict):
-        return model_cfg.get("default") or model_cfg.get("model") or ""
-    return ""
+        resolved = model_cfg.get("default") or model_cfg.get("model") or ""
+
+    resolved = str(resolved or "").strip()
+    if resolved:
+        return resolved
+
+    return os.getenv("HERMES_MODEL", "").strip()
 
 
 def _resolve_hermes_bin() -> Optional[list[str]]:
@@ -5122,14 +5128,10 @@ class GatewayRunner:
         # Accumulates tool lines into a single message that gets edited.
         #
         # Threading metadata is platform-specific:
-        # - Slack DM threading needs event_message_id fallback (reply thread)
         # - Telegram uses message_thread_id only for forum topics; passing a
         #   normal DM/group message id as thread_id causes send failures
         # - Other platforms should use explicit source.thread_id only
-        if source.platform == Platform.SLACK:
-            _progress_thread_id = source.thread_id or event_message_id
-        else:
-            _progress_thread_id = source.thread_id
+        _progress_thread_id = source.thread_id
         _progress_metadata = (
             {"thread_id": _progress_thread_id} if _progress_thread_id else None
         )

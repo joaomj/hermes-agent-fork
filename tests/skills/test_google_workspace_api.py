@@ -11,7 +11,7 @@ import pytest
 
 SCRIPT_PATH = (
     Path(__file__).resolve().parents[2]
-    / "skills/productivity/google-workspace/scripts/google_api.py"
+    / "_skills-available/productivity/google-workspace/scripts/google_api.py"
 )
 
 
@@ -28,23 +28,25 @@ class FakeAuthorizedCredentials:
         self.expired = False
 
     def to_json(self):
-        return json.dumps({
-            "token": "refreshed-token",
-            "refresh_token": self.refresh_token,
-            "token_uri": "https://oauth2.googleapis.com/token",
-            "client_id": "client-id",
-            "client_secret": "client-secret",
-            "scopes": [
-                "https://www.googleapis.com/auth/gmail.readonly",
-                "https://www.googleapis.com/auth/gmail.send",
-                "https://www.googleapis.com/auth/gmail.modify",
-                "https://www.googleapis.com/auth/calendar",
-                "https://www.googleapis.com/auth/drive.readonly",
-                "https://www.googleapis.com/auth/contacts.readonly",
-                "https://www.googleapis.com/auth/spreadsheets",
-                "https://www.googleapis.com/auth/documents.readonly",
-            ],
-        })
+        return json.dumps(
+            {
+                "token": "refreshed-token",
+                "refresh_token": self.refresh_token,
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "client_id": "client-id",
+                "client_secret": "client-secret",
+                "scopes": [
+                    "https://www.googleapis.com/auth/gmail.readonly",
+                    "https://www.googleapis.com/auth/gmail.send",
+                    "https://www.googleapis.com/auth/gmail.modify",
+                    "https://www.googleapis.com/auth/calendar",
+                    "https://www.googleapis.com/auth/drive.readonly",
+                    "https://www.googleapis.com/auth/contacts.readonly",
+                    "https://www.googleapis.com/auth/spreadsheets",
+                    "https://www.googleapis.com/auth/documents.readonly",
+                ],
+            }
+        )
 
 
 class FakeCredentialsFactory:
@@ -73,7 +75,9 @@ def google_api_module(monkeypatch, tmp_path):
     monkeypatch.setitem(sys.modules, "google.auth.transport", transport_module)
     monkeypatch.setitem(sys.modules, "google.auth.transport.requests", requests_module)
 
-    spec = importlib.util.spec_from_file_location("google_workspace_api_test", SCRIPT_PATH)
+    spec = importlib.util.spec_from_file_location(
+        "google_workspace_api_test", SCRIPT_PATH
+    )
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
     spec.loader.exec_module(module)
@@ -83,22 +87,29 @@ def google_api_module(monkeypatch, tmp_path):
 
 
 def _write_token(path: Path, scopes):
-    path.write_text(json.dumps({
-        "token": "access-token",
-        "refresh_token": "refresh-token",
-        "token_uri": "https://oauth2.googleapis.com/token",
-        "client_id": "client-id",
-        "client_secret": "client-secret",
-        "scopes": scopes,
-    }))
+    path.write_text(
+        json.dumps(
+            {
+                "token": "access-token",
+                "refresh_token": "refresh-token",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "client_id": "client-id",
+                "client_secret": "client-secret",
+                "scopes": scopes,
+            }
+        )
+    )
 
 
 def test_get_credentials_rejects_missing_scopes(google_api_module, capsys):
     FakeCredentialsFactory.creds = FakeAuthorizedCredentials(valid=True)
-    _write_token(google_api_module.TOKEN_PATH, [
-        "https://www.googleapis.com/auth/drive.readonly",
-        "https://www.googleapis.com/auth/spreadsheets",
-    ])
+    _write_token(
+        google_api_module.TOKEN_PATH,
+        [
+            "https://www.googleapis.com/auth/drive.readonly",
+            "https://www.googleapis.com/auth/spreadsheets",
+        ],
+    )
 
     with pytest.raises(SystemExit):
         google_api_module.get_credentials()

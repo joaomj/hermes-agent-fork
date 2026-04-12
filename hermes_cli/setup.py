@@ -730,16 +730,10 @@ def _print_setup_summary(config: dict, hermes_home):
     browser_provider = config.get("browser", {}).get("provider", "")
     if browser_provider:
         tool_status.append((f"Browser Automation ({browser_provider})", True, None))
-    elif (
-        get_env_value("BROWSERBASE_API_KEY")
-        or get_env_value("BROWSER_USE_API_KEY")
-        or get_env_value("CAMOFOX_URL")
-    ):
+    elif get_env_value("BROWSERBASE_API_KEY") or get_env_value("BROWSER_USE_API_KEY"):
         tool_status.append(("Browser Automation", True, None))
     else:
-        missing_browser_hint = (
-            "npm install -g agent-browser, set CAMOFOX_URL, or configure Browserbase"
-        )
+        missing_browser_hint = "npm install -g agent-browser or configure Browserbase"
         tool_status.append(("Browser Automation", False, missing_browser_hint))
 
     # FAL (image generation)
@@ -2366,14 +2360,6 @@ def _get_section_config_summary(config: dict, section_key: str) -> Optional[str]
         platforms = []
         if get_env_value("TELEGRAM_BOT_TOKEN"):
             platforms.append("Telegram")
-        if get_env_value("DISCORD_BOT_TOKEN"):
-            platforms.append("Discord")
-        if get_env_value("SLACK_BOT_TOKEN"):
-            platforms.append("Slack")
-        if get_env_value("WHATSAPP_PHONE_NUMBER_ID"):
-            platforms.append("WhatsApp")
-        if get_env_value("SIGNAL_ACCOUNT"):
-            platforms.append("Signal")
         if platforms:
             return ", ".join(platforms)
         return None  # No platforms configured — section must run
@@ -2412,7 +2398,7 @@ def _skip_configured_section(config: dict, section_key: str, label: str) -> bool
 
 
 _OPENCLAW_SCRIPT = (
-    get_optional_skills_dir(PROJECT_ROOT / "optional-skills")
+    get_optional_skills_dir(PROJECT_ROOT / "_optional-skills-available")
     / "migration"
     / "openclaw-migration"
     / "scripts"

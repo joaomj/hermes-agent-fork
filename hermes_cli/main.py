@@ -962,6 +962,7 @@ def select_provider_and_model(args=None):
 
     provider_labels = {
         "openrouter": "OpenRouter",
+        "nous": "Nous Research",
         "openai-codex": "OpenAI Codex",
         "copilot-acp": "GitHub Copilot ACP",
         "copilot": "GitHub Copilot",
@@ -988,6 +989,7 @@ def select_provider_and_model(args=None):
     # Step 1: Provider selection — put active provider first with marker
     providers = [
         ("openrouter", "OpenRouter (100+ models, pay-per-use)"),
+        ("nous", "Nous Research (OAuth device login)"),
         ("openai-codex", "OpenAI Codex"),
         ("copilot-acp", "GitHub Copilot ACP (spawns `copilot --acp --stdio`)"),
         ("copilot", "GitHub Copilot (uses GITHUB_TOKEN or gh auth token)"),
@@ -1058,6 +1060,8 @@ def select_provider_and_model(args=None):
     # Step 2: Provider-specific setup + model selection
     if selected_provider == "openrouter":
         _model_flow_openrouter(config, current_model)
+    elif selected_provider == "nous":
+        _model_flow_nous(args=args)
     elif selected_provider == "openai-codex":
         _model_flow_openai_codex(config, current_model)
     elif selected_provider == "copilot-acp":
@@ -1132,6 +1136,14 @@ def _prompt_provider_choice(choices):
         except (KeyboardInterrupt, EOFError):
             print()
             return None
+
+
+def _model_flow_nous(args=None):
+    """Nous provider: run OAuth login and optional model selection."""
+    from hermes_cli.auth import PROVIDER_REGISTRY, _login_nous
+
+    login_args = args or argparse.Namespace()
+    _login_nous(login_args, PROVIDER_REGISTRY["nous"])
 
 
 def _model_flow_openrouter(config, current_model=""):

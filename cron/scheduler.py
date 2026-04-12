@@ -94,6 +94,7 @@ def _resolve_delivery_target(job: dict) -> Optional[dict]:
         # that aren't valid platform IDs (e.g. WhatsApp JIDs).
         try:
             from gateway.channel_directory import resolve_channel_name
+
             target = chat_id
             # Strip display suffix like " (dm)" or " (group)"
             if target.endswith(")") and " (" in target:
@@ -155,33 +156,29 @@ def _deliver_result(job: dict, content: str) -> None:
 
     platform_map = {
         "telegram": Platform.TELEGRAM,
-        "discord": Platform.DISCORD,
-        "slack": Platform.SLACK,
-        "whatsapp": Platform.WHATSAPP,
-        "signal": Platform.SIGNAL,
-        "matrix": Platform.MATRIX,
-        "mattermost": Platform.MATTERMOST,
-        "homeassistant": Platform.HOMEASSISTANT,
-        "dingtalk": Platform.DINGTALK,
-        "feishu": Platform.FEISHU,
-        "wecom": Platform.WECOM,
-        "email": Platform.EMAIL,
-        "sms": Platform.SMS,
+        "api_server": Platform.API_SERVER,
+        "webhook": Platform.WEBHOOK,
     }
     platform = platform_map.get(platform_name.lower())
     if not platform:
-        logger.warning("Job '%s': unknown platform '%s' for delivery", job["id"], platform_name)
+        logger.warning(
+            "Job '%s': unknown platform '%s' for delivery", job["id"], platform_name
+        )
         return
 
     try:
         config = load_gateway_config()
     except Exception as e:
-        logger.error("Job '%s': failed to load gateway config for delivery: %s", job["id"], e)
+        logger.error(
+            "Job '%s': failed to load gateway config for delivery: %s", job["id"], e
+        )
         return
 
     pconfig = config.platforms.get(platform)
     if not pconfig or not pconfig.enabled:
-        logger.warning("Job '%s': platform '%s' not configured/enabled", job["id"], platform_name)
+        logger.warning(
+            "Job '%s': platform '%s' not configured/enabled", job["id"], platform_name
+        )
         return
 
     # Optionally wrap the content with a header/footer so the user knows this
@@ -206,7 +203,9 @@ def _deliver_result(job: dict, content: str) -> None:
         delivery_content = content
 
     # Run the async send in a fresh event loop (safe from any thread)
-    coro = _send_to_platform(platform, pconfig, chat_id, delivery_content, thread_id=thread_id)
+    coro = _send_to_platform(
+        platform, pconfig, chat_id, delivery_content, thread_id=thread_id
+    )
     try:
         result = asyncio.run(coro)
     except RuntimeError:
@@ -216,11 +215,23 @@ def _deliver_result(job: dict, content: str) -> None:
         # fresh thread that has no running loop.
         coro.close()
         import concurrent.futures
+
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-            future = pool.submit(asyncio.run, _send_to_platform(platform, pconfig, chat_id, delivery_content, thread_id=thread_id))
+            future = pool.submit(
+                asyncio.run,
+                _send_to_platform(
+                    platform, pconfig, chat_id, delivery_content, thread_id=thread_id
+                ),
+            )
             result = future.result(timeout=30)
     except Exception as e:
-        logger.error("Job '%s': delivery to %s:%s failed: %s", job["id"], platform_name, chat_id, e)
+        logger.error(
+            "Job '%s': delivery to %s:%s failed: %s",
+            job["id"],
+            platform_name,
+            chat_id,
+            e,
+        )
         return
 
     if result and result.get("error"):
@@ -239,7 +250,7 @@ def _build_job_prompt(job: dict) -> str:
     silent_hint = (
         "[SYSTEM: If you have a meaningful status report or findings, "
         "send them — that is the whole point of this job. Only respond "
-        "with exactly \"[SILENT]\" (nothing else) when there is genuinely "
+        'with exactly "[SILENT]" (nothing else) when there is genuinely '
         "nothing new to report. [SILENT] suppresses delivery to the user. "
         "Never combine [SILENT] with content — either report your "
         "findings normally, or say [SILENT] and nothing more.]\n\n"
@@ -261,7 +272,11 @@ def _build_job_prompt(job: dict) -> str:
         loaded = json.loads(skill_view(skill_name))
         if not loaded.get("success"):
             error = loaded.get("error") or f"Failed to load skill '{skill_name}'"
-            logger.warning("Cron job '%s': skill not found, skipping — %s", job.get("name", job.get("id")), error)
+            logger.warning(
+                "Cron job '%s': skill not found, skipping — %s",
+                job.get("name", job.get("id")),
+                error,
+            )
             skipped.append(skill_name)
             continue
 
@@ -286,28 +301,36 @@ def _build_job_prompt(job: dict) -> str:
         parts.insert(0, notice)
 
     if prompt:
-        parts.extend(["", f"The user has provided the following instruction alongside the skill invocation: {prompt}"])
+        parts.extend(
+            [
+                "",
+                f"The user has provided the following instruction alongside the skill invocation: {prompt}",
+            ]
+        )
     return "\n".join(parts)
 
 
 def run_job(job: dict) -> tuple[bool, str, str, Optional[str]]:
     """
     Execute a single cron job.
-    
+
     Returns:
         Tuple of (success, full_output_doc, final_response, error_message)
     """
     from run_agent import AIAgent
-    
+
     # Initialize SQLite session store so cron job messages are persisted
     # and discoverable via session_search (same pattern as gateway/run.py).
     _session_db = None
     try:
         from hermes_state import SessionDB
+
         _session_db = SessionDB()
     except Exception as e:
-        logger.debug("Job '%s': SQLite session store not available: %s", job.get("id", "?"), e)
-    
+        logger.debug(
+            "Job '%s': SQLite session store not available: %s", job.get("id", "?"), e
+        )
+
     job_id = job["id"]
     job_name = job["name"]
     prompt = _build_job_prompt(job)
@@ -328,6 +351,7 @@ def run_job(job: dict) -> tuple[bool, str, str, Optional[str]]:
         # Re-read .env and config.yaml fresh every run so provider/key
         # changes take effect without a gateway restart.
         from dotenv import load_dotenv
+
         try:
             load_dotenv(str(_hermes_home / ".env"), override=True, encoding="utf-8")
         except UnicodeDecodeError:
@@ -335,10 +359,16 @@ def run_job(job: dict) -> tuple[bool, str, str, Optional[str]]:
 
         delivery_target = _resolve_delivery_target(job)
         if delivery_target:
-            os.environ["HERMES_CRON_AUTO_DELIVER_PLATFORM"] = delivery_target["platform"]
-            os.environ["HERMES_CRON_AUTO_DELIVER_CHAT_ID"] = str(delivery_target["chat_id"])
+            os.environ["HERMES_CRON_AUTO_DELIVER_PLATFORM"] = delivery_target[
+                "platform"
+            ]
+            os.environ["HERMES_CRON_AUTO_DELIVER_CHAT_ID"] = str(
+                delivery_target["chat_id"]
+            )
             if delivery_target.get("thread_id") is not None:
-                os.environ["HERMES_CRON_AUTO_DELIVER_THREAD_ID"] = str(delivery_target["thread_id"])
+                os.environ["HERMES_CRON_AUTO_DELIVER_THREAD_ID"] = str(
+                    delivery_target["thread_id"]
+                )
 
         model = job.get("model") or os.getenv("HERMES_MODEL") or ""
 
@@ -346,6 +376,7 @@ def run_job(job: dict) -> tuple[bool, str, str, Optional[str]]:
         _cfg = {}
         try:
             import yaml
+
             _cfg_path = str(_hermes_home / "config.yaml")
             if os.path.exists(_cfg_path):
                 with open(_cfg_path) as _f:
@@ -357,10 +388,13 @@ def run_job(job: dict) -> tuple[bool, str, str, Optional[str]]:
                     elif isinstance(_model_cfg, dict):
                         model = _model_cfg.get("default", model)
         except Exception as e:
-            logger.warning("Job '%s': failed to load config.yaml, using defaults: %s", job_id, e)
+            logger.warning(
+                "Job '%s': failed to load config.yaml, using defaults: %s", job_id, e
+            )
 
         # Reasoning config from env or config.yaml
         from hermes_constants import parse_reasoning_effort
+
         effort = os.getenv("HERMES_REASONING_EFFORT", "")
         if not effort:
             effort = str(_cfg.get("agent", {}).get("reasoning_effort", "")).strip()
@@ -368,9 +402,12 @@ def run_job(job: dict) -> tuple[bool, str, str, Optional[str]]:
 
         # Prefill messages from env or config.yaml
         prefill_messages = None
-        prefill_file = os.getenv("HERMES_PREFILL_MESSAGES_FILE", "") or _cfg.get("prefill_messages_file", "")
+        prefill_file = os.getenv("HERMES_PREFILL_MESSAGES_FILE", "") or _cfg.get(
+            "prefill_messages_file", ""
+        )
         if prefill_file:
             import json as _json
+
             pfpath = Path(prefill_file).expanduser()
             if not pfpath.is_absolute():
                 pfpath = _hermes_home / pfpath
@@ -381,11 +418,18 @@ def run_job(job: dict) -> tuple[bool, str, str, Optional[str]]:
                     if not isinstance(prefill_messages, list):
                         prefill_messages = None
                 except Exception as e:
-                    logger.warning("Job '%s': failed to parse prefill messages file '%s': %s", job_id, pfpath, e)
+                    logger.warning(
+                        "Job '%s': failed to parse prefill messages file '%s': %s",
+                        job_id,
+                        pfpath,
+                        e,
+                    )
                     prefill_messages = None
 
         # Max iterations
-        max_iterations = _cfg.get("agent", {}).get("max_turns") or _cfg.get("max_turns") or 90
+        max_iterations = (
+            _cfg.get("agent", {}).get("max_turns") or _cfg.get("max_turns") or 90
+        )
 
         # Provider routing
         pr = _cfg.get("provider_routing", {})
@@ -395,9 +439,11 @@ def run_job(job: dict) -> tuple[bool, str, str, Optional[str]]:
             resolve_runtime_provider,
             format_runtime_provider_error,
         )
+
         try:
             runtime_kwargs = {
-                "requested": job.get("provider") or os.getenv("HERMES_INFERENCE_PROVIDER"),
+                "requested": job.get("provider")
+                or os.getenv("HERMES_INFERENCE_PROVIDER"),
             }
             if job.get("base_url"):
                 runtime_kwargs["explicit_base_url"] = job.get("base_url")
@@ -407,6 +453,7 @@ def run_job(job: dict) -> tuple[bool, str, str, Optional[str]]:
             raise RuntimeError(message) from exc
 
         from agent.smart_model_routing import resolve_turn_route
+
         turn_route = resolve_turn_route(
             prompt,
             smart_routing,
@@ -443,7 +490,7 @@ def run_job(job: dict) -> tuple[bool, str, str, Optional[str]]:
             session_id=_cron_session_id,
             session_db=_session_db,
         )
-        
+
         # Run the agent with a timeout so a hung API call or tool doesn't
         # block the cron ticker thread indefinitely.  Default 10 minutes;
         # override via env var.  Uses a separate thread because
@@ -456,7 +503,8 @@ def run_job(job: dict) -> tuple[bool, str, str, Optional[str]]:
         except concurrent.futures.TimeoutError:
             logger.error(
                 "Job '%s' timed out after %.0fs — interrupting agent",
-                job_name, _cron_timeout,
+                job_name,
+                _cron_timeout,
             )
             if hasattr(agent, "interrupt"):
                 agent.interrupt("Cron job timed out")
@@ -471,13 +519,15 @@ def run_job(job: dict) -> tuple[bool, str, str, Optional[str]]:
         final_response = result.get("final_response", "") or ""
         # Use a separate variable for log display; keep final_response clean
         # for delivery logic (empty response = no delivery).
-        logged_response = final_response if final_response else "(No response generated)"
-        
+        logged_response = (
+            final_response if final_response else "(No response generated)"
+        )
+
         output = f"""# Cron Job: {job_name}
 
 **Job ID:** {job_id}
-**Run Time:** {_hermes_now().strftime('%Y-%m-%d %H:%M:%S')}
-**Schedule:** {job.get('schedule_display', 'N/A')}
+**Run Time:** {_hermes_now().strftime("%Y-%m-%d %H:%M:%S")}
+**Schedule:** {job.get("schedule_display", "N/A")}
 
 ## Prompt
 
@@ -487,19 +537,19 @@ def run_job(job: dict) -> tuple[bool, str, str, Optional[str]]:
 
 {logged_response}
 """
-        
+
         logger.info("Job '%s' completed successfully", job_name)
         return True, output, final_response, None
-        
+
     except Exception as e:
         error_msg = f"{type(e).__name__}: {str(e)}"
         logger.error("Job '%s' failed: %s", job_name, error_msg)
-        
+
         output = f"""# Cron Job: {job_name} (FAILED)
 
 **Job ID:** {job_id}
-**Run Time:** {_hermes_now().strftime('%Y-%m-%d %H:%M:%S')}
-**Schedule:** {job.get('schedule_display', 'N/A')}
+**Run Time:** {_hermes_now().strftime("%Y-%m-%d %H:%M:%S")}
+**Schedule:** {job.get("schedule_display", "N/A")}
 
 ## Prompt
 
@@ -534,19 +584,21 @@ def run_job(job: dict) -> tuple[bool, str, str, Optional[str]]:
             try:
                 _session_db.close()
             except (Exception, KeyboardInterrupt) as e:
-                logger.debug("Job '%s': failed to close SQLite session store: %s", job_id, e)
+                logger.debug(
+                    "Job '%s': failed to close SQLite session store: %s", job_id, e
+                )
 
 
 def tick(verbose: bool = True) -> int:
     """
     Check and run all due jobs.
-    
+
     Uses a file lock so only one tick runs at a time, even if the gateway's
     in-process ticker and a standalone daemon or manual tick overlap.
-    
+
     Args:
         verbose: Whether to print status messages
-    
+
     Returns:
         Number of jobs executed (0 if another tick is already running)
     """
@@ -570,11 +622,13 @@ def tick(verbose: bool = True) -> int:
         due_jobs = get_due_jobs()
 
         if verbose and not due_jobs:
-            logger.info("%s - No jobs due", _hermes_now().strftime('%H:%M:%S'))
+            logger.info("%s - No jobs due", _hermes_now().strftime("%H:%M:%S"))
             return 0
 
         if verbose:
-            logger.info("%s - %s job(s) due", _hermes_now().strftime('%H:%M:%S'), len(due_jobs))
+            logger.info(
+                "%s - %s job(s) due", _hermes_now().strftime("%H:%M:%S"), len(due_jobs)
+            )
 
         executed = 0
         for job in due_jobs:
@@ -594,10 +648,22 @@ def tick(verbose: bool = True) -> int:
                 # Deliver the final response to the origin/target chat.
                 # If the agent responded with [SILENT], skip delivery (but
                 # output is already saved above).  Failed jobs always deliver.
-                deliver_content = final_response if success else f"⚠️ Cron job '{job.get('name', job['id'])}' failed:\n{error}"
+                deliver_content = (
+                    final_response
+                    if success
+                    else f"⚠️ Cron job '{job.get('name', job['id'])}' failed:\n{error}"
+                )
                 should_deliver = bool(deliver_content)
-                if should_deliver and success and deliver_content.strip().upper().startswith(SILENT_MARKER):
-                    logger.info("Job '%s': agent returned %s — skipping delivery", job["id"], SILENT_MARKER)
+                if (
+                    should_deliver
+                    and success
+                    and deliver_content.strip().upper().startswith(SILENT_MARKER)
+                ):
+                    logger.info(
+                        "Job '%s': agent returned %s — skipping delivery",
+                        job["id"],
+                        SILENT_MARKER,
+                    )
                     should_deliver = False
 
                 if should_deliver:
@@ -610,7 +676,7 @@ def tick(verbose: bool = True) -> int:
                 executed += 1
 
             except Exception as e:
-                logger.error("Error processing job %s: %s", job['id'], e)
+                logger.error("Error processing job %s: %s", job["id"], e)
                 mark_job_run(job["id"], False, str(e))
 
         return executed
