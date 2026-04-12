@@ -5,7 +5,7 @@ Modular wizard with independently-runnable sections:
   1. Model & Provider — choose your AI provider and model
   2. Terminal Backend — where your agent runs commands
   3. Agent Settings — iterations, compression, session reset
-  4. Messaging Platforms — connect Telegram, Discord, etc.
+  4. Messaging Platforms — connect Telegram
   5. Tools — configure web search, image generation, etc.
 
 Config files are stored in ~/.hermes/ for easy access.
@@ -1203,7 +1203,7 @@ def setup_terminal_backend(config: dict):
         # CWD for messaging
         print()
         print_info("Working directory for messaging sessions:")
-        print_info("  When using Hermes via Telegram/Discord, this is where")
+        print_info("  When using Hermes via Telegram, this is where")
         print_info(
             "  the agent starts. CLI mode always starts in the current directory."
         )
@@ -1443,9 +1443,7 @@ def setup_agent_settings(config: dict):
 
     # ── Session Reset Policy ──
     print_header("Session Reset Policy")
-    print_info(
-        "Messaging sessions (Telegram, Discord, etc.) accumulate context over time."
-    )
+    print_info("Messaging sessions (Telegram) accumulate context over time.")
     print_info(
         "Each message adds to the conversation history, which means growing API costs."
     )
@@ -2197,7 +2195,7 @@ def run_setup_wizard(args):
         print_info("  1. Model & Provider — choose your AI provider and model")
         print_info("  2. Terminal Backend — where your agent runs commands")
         print_info("  3. Agent Settings — iterations, compression, session reset")
-        print_info("  4. Messaging Platforms — connect Telegram, Discord, etc.")
+        print_info("  4. Messaging Platforms — connect Telegram")
         print_info("  5. Tools — configure web search, image generation, etc.")
         print()
         print_info("Press Enter to begin, or Ctrl+C to exit.")
@@ -2368,10 +2366,6 @@ def _run_quick_setup(config: dict, hermes_home):
             name = var["name"]
             if "TELEGRAM" in name:
                 plat = "Telegram"
-            elif "DISCORD" in name:
-                plat = "Discord"
-            elif "SLACK" in name:
-                plat = "Slack"
             else:
                 continue
             if plat not in platforms:
@@ -2379,12 +2373,7 @@ def _run_quick_setup(config: dict, hermes_home):
             platforms.setdefault(plat, []).append(var)
 
         platform_labels = [
-            {
-                "Telegram": "📱 Telegram",
-                "Discord": "💬 Discord",
-                "Slack": "💼 Slack",
-            }.get(p, p)
-            for p in platform_order
+            {"Telegram": "📱 Telegram"}.get(p, p) for p in platform_order
         ]
 
         selected_indices = prompt_checklist(
@@ -2395,7 +2384,7 @@ def _run_quick_setup(config: dict, hermes_home):
         for idx in selected_indices:
             plat = platform_order[idx]
             vars_list = platforms[plat]
-            emoji = {"Telegram": "📱", "Discord": "💬", "Slack": "💼"}.get(plat, "")
+            emoji = {"Telegram": "📱"}.get(plat, "")
             print()
             print(color(f"  ─── {emoji} {plat} ───", Colors.CYAN))
             print()
