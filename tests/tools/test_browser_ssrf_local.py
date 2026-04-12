@@ -1,7 +1,7 @@
 """Tests that browser_navigate SSRF checks respect local-backend mode and
 the allow_private_urls setting.
 
-Local backends (Camofox, headless Chromium without a cloud provider) skip
+Local backends (headless Chromium without a cloud provider) skip
 SSRF checks entirely — the agent already has full local-network access via
 the terminal tool.
 
@@ -32,7 +32,6 @@ class TestPreNavigationSsrf:
     @pytest.fixture()
     def _common_patches(self, monkeypatch):
         """Shared patches for pre-navigation tests that pass the SSRF check."""
-        monkeypatch.setattr(browser_tool, "_is_camofox_mode", lambda: False)
         monkeypatch.setattr(browser_tool, "check_website_access", lambda url: None)
         monkeypatch.setattr(
             browser_tool,
@@ -115,23 +114,14 @@ class TestPreNavigationSsrf:
 
 
 class TestIsLocalBackend:
-    def test_camofox_is_local(self, monkeypatch):
-        """Camofox mode was removed; provider decides local/cloud."""
-        monkeypatch.setattr(browser_tool, "_is_camofox_mode", lambda: True)
-        monkeypatch.setattr(browser_tool, "_get_cloud_provider", lambda: "anything")
-
-        assert browser_tool._is_local_backend() is False
-
     def test_no_cloud_provider_is_local(self, monkeypatch):
         """No cloud provider configured → local backend."""
-        monkeypatch.setattr(browser_tool, "_is_camofox_mode", lambda: False)
         monkeypatch.setattr(browser_tool, "_get_cloud_provider", lambda: None)
 
         assert browser_tool._is_local_backend() is True
 
     def test_cloud_provider_is_not_local(self, monkeypatch):
-        """Cloud provider configured and not Camofox → NOT local."""
-        monkeypatch.setattr(browser_tool, "_is_camofox_mode", lambda: False)
+        """Cloud provider configured → NOT local."""
         monkeypatch.setattr(browser_tool, "_get_cloud_provider", lambda: "bb")
 
         assert browser_tool._is_local_backend() is False
@@ -149,7 +139,6 @@ class TestPostRedirectSsrf:
     @pytest.fixture()
     def _common_patches(self, monkeypatch):
         """Shared patches for redirect tests."""
-        monkeypatch.setattr(browser_tool, "_is_camofox_mode", lambda: False)
         monkeypatch.setattr(browser_tool, "check_website_access", lambda url: None)
         monkeypatch.setattr(
             browser_tool,

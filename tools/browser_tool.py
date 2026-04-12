@@ -84,11 +84,6 @@ from tools.tool_backend_helpers import normalize_browser_cloud_provider
 logger = logging.getLogger(__name__)
 
 
-def _is_camofox_mode() -> bool:
-    """Stub - camofox support has been removed."""
-    return False
-
-
 # Standard PATH entries for environments with minimal PATH (e.g. systemd services).
 # Includes macOS Homebrew paths (/opt/homebrew/* for Apple Silicon).
 _SANE_PATH = (
