@@ -22,10 +22,6 @@ import tempfile
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Tuple
 
-from tools.tool_backend_helpers import (
-    managed_nous_tools_enabled as _managed_nous_tools_enabled,
-)
-
 _IS_WINDOWS = platform.system() == "Windows"
 _ENV_VAR_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 # Env var names written to .env that aren't in OPTIONAL_ENV_VARS
@@ -246,7 +242,7 @@ DEFAULT_CONFIG = {
         "env_passthrough": [],
         "docker_image": "nikolaik/python-nodejs:python3.11-nodejs20",
         "docker_forward_env": [],
-        # Container resource limits (docker, singularity, modal, daytona — ignored for local/ssh)
+        # Container resource limits (docker, modal — ignored for local/ssh)
         "container_cpu": 1,
         "container_memory": 5120,  # MB (default 5GB)
         "container_disk": 51200,  # MB (default 50GB)
@@ -384,8 +380,7 @@ DEFAULT_CONFIG = {
         "memory_char_limit": 2200,  # ~800 tokens at 2.75 chars/token
         "user_char_limit": 1375,  # ~500 tokens at 2.75 chars/token
         # External memory provider plugin (empty = built-in only).
-        # Set to a provider name to activate: "openviking", "mem0",
-        # "hindsight", "holographic", "retaindb", "byterover".
+        # Set to "honcho" to activate the Honcho memory provider.
         # Only ONE external provider is allowed at a time.
         "provider": "",
     },
@@ -1045,15 +1040,6 @@ OPTIONAL_ENV_VARS = {
         "category": "setting",
     },
 }
-
-if not _managed_nous_tools_enabled():
-    for _hidden_var in (
-        "FIRECRAWL_GATEWAY_URL",
-        "TOOL_GATEWAY_DOMAIN",
-        "TOOL_GATEWAY_SCHEME",
-        "TOOL_GATEWAY_USER_TOKEN",
-    ):
-        OPTIONAL_ENV_VARS.pop(_hidden_var, None)
 
 
 def get_missing_env_vars(required_only: bool = False) -> List[Dict[str, Any]]:
@@ -1897,9 +1883,6 @@ def show_config():
         )
         modal_token = get_env_value("MODAL_TOKEN_ID")
         print(f"  Modal token:  {'configured' if modal_token else '(not set)'}")
-    elif terminal.get("backend") == "daytona":
-        daytona_key = get_env_value("DAYTONA_API_KEY")
-        print(f"  API key:      {'configured' if daytona_key else '(not set)'}")
     elif terminal.get("backend") == "ssh":
         ssh_host = get_env_value("TERMINAL_SSH_HOST")
         ssh_user = get_env_value("TERMINAL_SSH_USER")
