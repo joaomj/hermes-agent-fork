@@ -17,6 +17,7 @@ from pathlib import Path
 # Curses-based interactive picker (same pattern as hermes tools)
 # ---------------------------------------------------------------------------
 
+
 def _curses_select(title: str, items: list[tuple[str, str]], default: int = 0) -> int:
     """Interactive single-select with arrow keys.
 
@@ -25,6 +26,7 @@ def _curses_select(title: str, items: list[tuple[str, str]], default: int = 0) -
     """
     try:
         import curses
+
         result = [default]
 
         def _menu(stdscr):
@@ -43,10 +45,21 @@ def _curses_select(title: str, items: list[tuple[str, str]], default: int = 0) -
 
                 # Title
                 try:
-                    stdscr.addnstr(0, 0, title, max_x - 1,
-                                   curses.A_BOLD | (curses.color_pair(2) if curses.has_colors() else 0))
-                    stdscr.addnstr(1, 0, "  ↑↓ navigate  ⏎ select  q quit", max_x - 1,
-                                   curses.color_pair(3) if curses.has_colors() else curses.A_DIM)
+                    stdscr.addnstr(
+                        0,
+                        0,
+                        title,
+                        max_x - 1,
+                        curses.A_BOLD
+                        | (curses.color_pair(2) if curses.has_colors() else 0),
+                    )
+                    stdscr.addnstr(
+                        1,
+                        0,
+                        "  ↑↓ navigate  ⏎ select  q quit",
+                        max_x - 1,
+                        curses.color_pair(3) if curses.has_colors() else curses.A_DIM,
+                    )
                 except curses.error:
                     pass
 
@@ -65,21 +78,21 @@ def _curses_select(title: str, items: list[tuple[str, str]], default: int = 0) -
                         if curses.has_colors():
                             attr |= curses.color_pair(1)
                     try:
-                        stdscr.addnstr(y, 0, line[:max_x - 1], max_x - 1, attr)
+                        stdscr.addnstr(y, 0, line[: max_x - 1], max_x - 1, attr)
                     except curses.error:
                         pass
 
                 stdscr.refresh()
                 key = stdscr.getch()
 
-                if key in (curses.KEY_UP, ord('k')):
+                if key in (curses.KEY_UP, ord("k")):
                     cursor = (cursor - 1) % len(items)
-                elif key in (curses.KEY_DOWN, ord('j')):
+                elif key in (curses.KEY_DOWN, ord("j")):
                     cursor = (cursor + 1) % len(items)
                 elif key in (curses.KEY_ENTER, 10, 13):
                     result[0] = cursor
                     return
-                elif key in (27, ord('q')):
+                elif key in (27, ord("q")):
                     return
 
         curses.wrapper(_menu)
@@ -125,6 +138,7 @@ def _prompt(label: str, default: str | None = None, secret: bool = False) -> str
 # Provider discovery
 # ---------------------------------------------------------------------------
 
+
 def _install_dependencies(provider_name: str) -> None:
     """Install pip dependencies declared in plugin.yaml."""
     import subprocess
@@ -137,6 +151,7 @@ def _install_dependencies(provider_name: str) -> None:
 
     try:
         import yaml
+
         with open(yaml_path) as f:
             meta = yaml.safe_load(f) or {}
     except Exception:
@@ -149,8 +164,6 @@ def _install_dependencies(provider_name: str) -> None:
     # pip name → import name mapping for packages where they differ
     _IMPORT_NAMES = {
         "honcho-ai": "honcho",
-        "mem0ai": "mem0",
-        "hindsight-client": "hindsight_client",
     }
 
     # Check which packages are missing
@@ -169,7 +182,8 @@ def _install_dependencies(provider_name: str) -> None:
     try:
         subprocess.run(
             [sys.executable, "-m", "pip", "install", "--quiet"] + missing,
-            check=True, timeout=120,
+            check=True,
+            timeout=120,
             capture_output=True,
         )
         print(f"  ✓ Installed {', '.join(missing)}")
@@ -191,9 +205,7 @@ def _install_dependencies(provider_name: str) -> None:
         install_cmd = dep.get("install", "")
         if check_cmd:
             try:
-                subprocess.run(
-                    check_cmd, shell=True, capture_output=True, timeout=5
-                )
+                subprocess.run(check_cmd, shell=True, capture_output=True, timeout=5)
             except Exception:
                 if install_cmd:
                     print(f"\n  ⚠ '{dep_name}' not found. Install with:")
@@ -207,6 +219,7 @@ def _get_available_providers() -> list:
     """
     try:
         from plugins.memory import discover_memory_providers, load_memory_provider
+
         raw = discover_memory_providers()
     except Exception:
         raw = []
@@ -220,7 +233,11 @@ def _get_available_providers() -> list:
         except Exception:
             continue
         # Override description with setup hint
-        schema = provider.get_config_schema() if hasattr(provider, "get_config_schema") else []
+        schema = (
+            provider.get_config_schema()
+            if hasattr(provider, "get_config_schema")
+            else []
+        )
         has_secrets = any(f.get("secret") for f in schema)
         if has_secrets:
             setup_hint = "requires API key"
@@ -235,6 +252,7 @@ def _get_available_providers() -> list:
 # ---------------------------------------------------------------------------
 # Setup wizard
 # ---------------------------------------------------------------------------
+
 
 def cmd_setup(args) -> None:
     """Interactive memory provider setup wizard."""
@@ -273,14 +291,18 @@ def cmd_setup(args) -> None:
     # Install pip dependencies if declared in plugin.yaml
     _install_dependencies(name)
 
-    schema = provider.get_config_schema() if hasattr(provider, "get_config_schema") else []
+    schema = (
+        provider.get_config_schema() if hasattr(provider, "get_config_schema") else []
+    )
 
     # Provider config section
     provider_config = config["memory"].get(name, {})
     if not isinstance(provider_config, dict):
         provider_config = {}
 
-    env_path = Path(os.environ.get("HERMES_HOME", os.path.expanduser("~/.hermes"))) / ".env"
+    env_path = (
+        Path(os.environ.get("HERMES_HOME", os.path.expanduser("~/.hermes"))) / ".env"
+    )
     env_writes = {}
 
     if schema:
@@ -309,7 +331,9 @@ def cmd_setup(args) -> None:
                 existing = os.environ.get(env_var, "") if env_var else ""
                 if existing:
                     masked = f"...{existing[-4:]}" if len(existing) > 4 else "set"
-                    val = _prompt(f"{desc} (current: {masked}, blank to keep)", secret=True)
+                    val = _prompt(
+                        f"{desc} (current: {masked}, blank to keep)", secret=True
+                    )
                 else:
                     hint = f"  Get yours at {url}" if url else ""
                     if hint:
@@ -321,7 +345,9 @@ def cmd_setup(args) -> None:
                 # Regular text prompt
                 current = provider_config.get(key)
                 effective_default = current or default
-                val = _prompt(desc, default=str(effective_default) if effective_default else None)
+                val = _prompt(
+                    desc, default=str(effective_default) if effective_default else None
+                )
                 if val:
                     provider_config[key] = val
 
@@ -330,7 +356,9 @@ def cmd_setup(args) -> None:
     save_config(config)
 
     # Write non-secret config to provider's native location
-    hermes_home = str(Path(os.environ.get("HERMES_HOME", os.path.expanduser("~/.hermes"))))
+    hermes_home = str(
+        Path(os.environ.get("HERMES_HOME", os.path.expanduser("~/.hermes")))
+    )
     if provider_config and hasattr(provider, "save_config"):
         try:
             provider.save_config(provider_config, hermes_home)
@@ -379,6 +407,7 @@ def _write_env_vars(env_path: Path, env_writes: dict) -> None:
 # Status
 # ---------------------------------------------------------------------------
 
+
 def cmd_status(args) -> None:
     """Show current memory provider config."""
     from hermes_cli.config import load_config
@@ -408,7 +437,11 @@ def cmd_status(args) -> None:
                         print(f"  Status:    available ✓")
                     else:
                         print(f"  Status:    not available ✗")
-                        schema = p.get_config_schema() if hasattr(p, "get_config_schema") else []
+                        schema = (
+                            p.get_config_schema()
+                            if hasattr(p, "get_config_schema")
+                            else []
+                        )
                         secrets = [f for f in schema if f.get("secret")]
                         if secrets:
                             print(f"  Missing:")
@@ -424,7 +457,9 @@ def cmd_status(args) -> None:
                     break
         else:
             print(f"\n  Plugin:    NOT installed ✗")
-            print(f"  Install the '{provider_name}' memory plugin to ~/.hermes/plugins/")
+            print(
+                f"  Install the '{provider_name}' memory plugin to ~/.hermes/plugins/"
+            )
 
     providers = _get_available_providers()
     if providers:
@@ -439,6 +474,7 @@ def cmd_status(args) -> None:
 # ---------------------------------------------------------------------------
 # Router
 # ---------------------------------------------------------------------------
+
 
 def memory_command(args) -> None:
     """Route memory subcommands."""

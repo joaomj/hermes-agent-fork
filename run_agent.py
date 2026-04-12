@@ -6744,7 +6744,7 @@ class AIAgent:
                     elif self.quiet_mode:
                         self._vprint(f"  {cute_msg}")
             elif self._memory_manager and self._memory_manager.has_tool(function_name):
-                # Memory provider tools (hindsight_retain, honcho_search, etc.)
+                # Memory provider tools (honcho_*)
                 # These are not in the tool registry — route through MemoryManager.
                 spinner = None
                 if self.quiet_mode and not self.tool_progress_callback:
