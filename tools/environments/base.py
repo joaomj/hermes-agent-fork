@@ -36,9 +36,14 @@ class BaseEnvironment(ABC):
         self.env = env or {}
 
     @abstractmethod
-    def execute(self, command: str, cwd: str = "", *,
-                timeout: int | None = None,
-                stdin_data: str | None = None) -> dict:
+    def execute(
+        self,
+        command: str,
+        cwd: str = "",
+        *,
+        timeout: int | None = None,
+        stdin_data: str | None = None,
+    ) -> dict:
         """Execute a command, return {"output": str, "returncode": int}."""
         ...
 
@@ -68,14 +73,16 @@ class BaseEnvironment(ABC):
             (transformed_command, sudo_stdin) — see _transform_sudo_command
             for the full contract.  Callers that drive a subprocess directly
             should prepend sudo_stdin (when not None) to any stdin_data they
-            pass to Popen.  Callers that embed stdin via heredoc (modal,
-            daytona) handle sudo_stdin in their own execute() method.
+            pass to Popen.  Callers that embed stdin via heredoc (modal)
+            handle sudo_stdin in their own execute() method.
         """
         from tools.terminal_tool import _transform_sudo_command
+
         return _transform_sudo_command(command)
 
-    def _build_run_kwargs(self, timeout: int | None,
-                          stdin_data: str | None = None) -> dict:
+    def _build_run_kwargs(
+        self, timeout: int | None, stdin_data: str | None = None
+    ) -> dict:
         """Build common subprocess.run kwargs for non-interactive execution."""
         kw = {
             "text": True,

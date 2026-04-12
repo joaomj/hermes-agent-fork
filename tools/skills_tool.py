@@ -102,7 +102,7 @@ _PLATFORM_MAP = {
 }
 _ENV_VAR_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _EXCLUDED_SKILL_DIRS = frozenset((".git", ".github", ".hub"))
-_REMOTE_ENV_BACKENDS = frozenset({"docker", "singularity", "modal", "ssh", "daytona"})
+_REMOTE_ENV_BACKENDS = frozenset({"docker", "modal", "ssh"})
 _secret_capture_callback = None
 
 
@@ -140,6 +140,7 @@ def skill_matches_platform(frontmatter: Dict[str, Any]) -> bool:
     as a public re-export so existing callers don't need updating.
     """
     from agent.skill_utils import skill_matches_platform as _impl
+
     return _impl(frontmatter)
 
 
@@ -419,6 +420,7 @@ def _parse_frontmatter(content: str) -> Tuple[Dict[str, Any], str]:
     as a public re-export so existing callers don't need updating.
     """
     from agent.skill_utils import parse_frontmatter
+
     return parse_frontmatter(content)
 
 
@@ -481,7 +483,6 @@ def _parse_tags(tags_value) -> List[str]:
     return [t.strip().strip("\"'") for t in tags_value.split(",") if t.strip()]
 
 
-
 def _get_disabled_skill_names() -> Set[str]:
     """Load disabled skill names from config.
 
@@ -489,19 +490,24 @@ def _get_disabled_skill_names() -> Set[str]:
     as a public re-export so existing callers don't need updating.
     """
     from agent.skill_utils import get_disabled_skill_names
+
     return get_disabled_skill_names()
 
 
 def _is_skill_disabled(name: str, platform: str = None) -> bool:
     """Check if a skill is disabled in config."""
     import os
+
     try:
         from hermes_cli.config import load_config
+
         config = load_config()
         skills_cfg = config.get("skills", {})
         resolved_platform = platform or os.getenv("HERMES_PLATFORM")
         if resolved_platform:
-            platform_disabled = skills_cfg.get("platform_disabled", {}).get(resolved_platform)
+            platform_disabled = skills_cfg.get("platform_disabled", {}).get(
+                resolved_platform
+            )
             if platform_disabled is not None:
                 return name in platform_disabled
         return name in skills_cfg.get("disabled", [])
@@ -563,23 +569,28 @@ def _find_all_skills(*, skip_disabled: bool = False) -> List[Dict[str, Any]]:
                             break
 
                 if len(description) > MAX_DESCRIPTION_LENGTH:
-                    description = description[:MAX_DESCRIPTION_LENGTH - 3] + "..."
+                    description = description[: MAX_DESCRIPTION_LENGTH - 3] + "..."
 
                 category = _get_category_from_path(skill_md)
 
                 seen_names.add(name)
-                skills.append({
-                    "name": name,
-                    "description": description,
-                    "category": category,
-                })
+                skills.append(
+                    {
+                        "name": name,
+                        "description": description,
+                        "category": category,
+                    }
+                )
 
             except (UnicodeDecodeError, PermissionError) as e:
                 logger.debug("Failed to read skill file %s: %s", skill_md, e)
                 continue
             except Exception as e:
                 logger.debug(
-                    "Skipping skill at %s: failed to parse: %s", skill_md, e, exc_info=True
+                    "Skipping skill at %s: failed to parse: %s",
+                    skill_md,
+                    e,
+                    exc_info=True,
                 )
                 continue
 
@@ -892,11 +903,18 @@ def skill_view(name: str, file_path: str = None, task_id: str = None) -> str:
         if _outside_skills_dir or _injection_detected:
             _warnings = []
             if _outside_skills_dir:
-                _warnings.append(f"skill file is outside the trusted skills directory (~/.hermes/skills/): {skill_md}")
+                _warnings.append(
+                    f"skill file is outside the trusted skills directory (~/.hermes/skills/): {skill_md}"
+                )
             if _injection_detected:
-                _warnings.append("skill content contains patterns that may indicate prompt injection")
+                _warnings.append(
+                    "skill content contains patterns that may indicate prompt injection"
+                )
             import logging as _logging
-            _logging.getLogger(__name__).warning("Skill security warning for '%s': %s", name, "; ".join(_warnings))
+
+            _logging.getLogger(__name__).warning(
+                "Skill security warning for '%s': %s", name, "; ".join(_warnings)
+            )
 
         parsed_frontmatter: Dict[str, Any] = {}
         try:
@@ -1114,7 +1132,11 @@ def skill_view(name: str, file_path: str = None, task_id: str = None) -> str:
             rel_path = str(skill_md.relative_to(SKILLS_DIR))
         except ValueError:
             # External skill — use path relative to the skill's own parent dir
-            rel_path = str(skill_md.relative_to(skill_md.parent.parent)) if skill_md.parent.parent else skill_md.name
+            rel_path = (
+                str(skill_md.relative_to(skill_md.parent.parent))
+                if skill_md.parent.parent
+                else skill_md.name
+            )
         skill_name = frontmatter.get(
             "name", skill_md.stem if not skill_dir else skill_dir.name
         )
@@ -1217,9 +1239,7 @@ def skill_view(name: str, file_path: str = None, task_id: str = None) -> str:
         if setup_needed:
             missing_items = [
                 f"env ${env_name}" for env_name in remaining_missing_required_envs
-            ] + [
-                f"file {path}" for path in missing_cred_files
-            ]
+            ] + [f"file {path}" for path in missing_cred_files]
             setup_note = _build_setup_note(
                 SkillReadinessStatus.SETUP_NEEDED,
                 missing_items,
