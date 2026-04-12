@@ -50,13 +50,6 @@ _EXTRA_ENV_KEYS = frozenset(
         "TERMINAL_ENV",
         "TERMINAL_SSH_KEY",
         "TERMINAL_SSH_PORT",
-        "WHATSAPP_MODE",
-        "WHATSAPP_ENABLED",
-        "MATTERMOST_HOME_CHANNEL",
-        "MATTERMOST_REPLY_MODE",
-        "MATRIX_PASSWORD",
-        "MATRIX_ENCRYPTION",
-        "MATRIX_HOME_ROOM",
     }
 )
 import yaml
@@ -413,20 +406,6 @@ DEFAULT_CONFIG = {
     # IANA timezone (e.g. "Asia/Kolkata", "America/New_York").
     # Empty string means use server-local time.
     "timezone": "",
-    # Discord platform settings (gateway mode)
-    "discord": {
-        "require_mention": True,  # Require @mention to respond in server channels
-        "free_response_channels": "",  # Comma-separated channel IDs where bot responds without mention
-        "auto_thread": True,  # Auto-create threads on @mention in channels (like Slack)
-        "reactions": True,  # Add 👀/✅/❌ reactions to messages during processing
-    },
-    # WhatsApp platform settings (gateway mode)
-    "whatsapp": {
-        # Reply prefix prepended to every outgoing WhatsApp message.
-        # Default (None) uses the built-in "⚕ *Hermes Agent*" header.
-        # Set to "" (empty string) to disable the header entirely.
-        # Supports \n for newlines, e.g. "🤖 *My Bot*\n──────\n"
-    },
     # Approval mode for dangerous commands:
     #   manual — always prompt the user (default)
     #   smart  — use auxiliary LLM to auto-approve low-risk commands, prompt for high-risk
@@ -827,101 +806,6 @@ OPTIONAL_ENV_VARS = {
         "description": "Comma-separated Telegram user IDs allowed to use the bot (get ID from @userinfobot)",
         "prompt": "Allowed Telegram user IDs (comma-separated)",
         "url": "https://t.me/userinfobot",
-        "password": False,
-        "category": "messaging",
-    },
-    "DISCORD_BOT_TOKEN": {
-        "description": "Discord bot token from Developer Portal",
-        "prompt": "Discord bot token",
-        "url": "https://discord.com/developers/applications",
-        "password": True,
-        "category": "messaging",
-    },
-    "DISCORD_ALLOWED_USERS": {
-        "description": "Comma-separated Discord user IDs allowed to use the bot",
-        "prompt": "Allowed Discord user IDs (comma-separated)",
-        "url": None,
-        "password": False,
-        "category": "messaging",
-    },
-    "SLACK_BOT_TOKEN": {
-        "description": "Slack bot token (xoxb-). Get from OAuth & Permissions after installing your app. "
-        "Required scopes: chat:write, app_mentions:read, channels:history, groups:history, "
-        "im:history, im:read, im:write, users:read, files:write",
-        "prompt": "Slack Bot Token (xoxb-...)",
-        "url": "https://api.slack.com/apps",
-        "password": True,
-        "category": "messaging",
-    },
-    "SLACK_APP_TOKEN": {
-        "description": "Slack app-level token (xapp-) for Socket Mode. Get from Basic Information → "
-        "App-Level Tokens. Also ensure Event Subscriptions include: message.im, "
-        "message.channels, message.groups, app_mention",
-        "prompt": "Slack App Token (xapp-...)",
-        "url": "https://api.slack.com/apps",
-        "password": True,
-        "category": "messaging",
-    },
-    "MATTERMOST_URL": {
-        "description": "Mattermost server URL (e.g. https://mm.example.com)",
-        "prompt": "Mattermost server URL",
-        "url": "https://mattermost.com/deploy/",
-        "password": False,
-        "category": "messaging",
-    },
-    "MATTERMOST_TOKEN": {
-        "description": "Mattermost bot token or personal access token",
-        "prompt": "Mattermost bot token",
-        "url": None,
-        "password": True,
-        "category": "messaging",
-    },
-    "MATTERMOST_ALLOWED_USERS": {
-        "description": "Comma-separated Mattermost user IDs allowed to use the bot",
-        "prompt": "Allowed Mattermost user IDs (comma-separated)",
-        "url": None,
-        "password": False,
-        "category": "messaging",
-    },
-    "MATTERMOST_REQUIRE_MENTION": {
-        "description": "Require @mention in Mattermost channels (default: true). Set to false to respond to all messages.",
-        "prompt": "Require @mention in channels",
-        "url": None,
-        "password": False,
-        "category": "messaging",
-    },
-    "MATTERMOST_FREE_RESPONSE_CHANNELS": {
-        "description": "Comma-separated Mattermost channel IDs where bot responds without @mention",
-        "prompt": "Free-response channel IDs (comma-separated)",
-        "url": None,
-        "password": False,
-        "category": "messaging",
-    },
-    "MATRIX_HOMESERVER": {
-        "description": "Matrix homeserver URL (e.g. https://matrix.example.org)",
-        "prompt": "Matrix homeserver URL",
-        "url": "https://matrix.org/ecosystem/servers/",
-        "password": False,
-        "category": "messaging",
-    },
-    "MATRIX_ACCESS_TOKEN": {
-        "description": "Matrix access token (preferred over password login)",
-        "prompt": "Matrix access token",
-        "url": None,
-        "password": True,
-        "category": "messaging",
-    },
-    "MATRIX_USER_ID": {
-        "description": "Matrix user ID (e.g. @hermes:example.org)",
-        "prompt": "Matrix user ID (@user:server)",
-        "url": None,
-        "password": False,
-        "category": "messaging",
-    },
-    "MATRIX_ALLOWED_USERS": {
-        "description": "Comma-separated Matrix user IDs allowed to use the bot (@user:server format)",
-        "prompt": "Allowed Matrix user IDs (comma-separated)",
-        "url": None,
         "password": False,
         "category": "messaging",
     },
@@ -1943,13 +1827,13 @@ def show_config():
     print(color("◆ Messaging Platforms", Colors.CYAN, Colors.BOLD))
 
     telegram_token = get_env_value("TELEGRAM_BOT_TOKEN")
-    discord_token = get_env_value("DISCORD_BOT_TOKEN")
+    webhook_enabled = get_env_value("WEBHOOK_ENABLED")
 
     print(
         f"  Telegram:     {'configured' if telegram_token else color('not configured', Colors.DIM)}"
     )
     print(
-        f"  Discord:      {'configured' if discord_token else color('not configured', Colors.DIM)}"
+        f"  Webhooks:     {'enabled' if webhook_enabled else color('disabled', Colors.DIM)}"
     )
 
     print()
@@ -2017,13 +1901,10 @@ def set_config_value(key: str, value: str):
         "BROWSER_USE_API_KEY",
         "FAL_KEY",
         "TELEGRAM_BOT_TOKEN",
-        "DISCORD_BOT_TOKEN",
         "TERMINAL_SSH_HOST",
         "TERMINAL_SSH_USER",
         "TERMINAL_SSH_KEY",
         "SUDO_PASSWORD",
-        "SLACK_BOT_TOKEN",
-        "SLACK_APP_TOKEN",
         "GITHUB_TOKEN",
         "HONCHO_API_KEY",
         "WANDB_API_KEY",
