@@ -6,7 +6,7 @@ Modular wizard with independently-runnable sections:
   2. Terminal Backend — where your agent runs commands
   3. Agent Settings — iterations, compression, session reset
   4. Messaging Platforms — connect Telegram, Discord, etc.
-  5. Tools — configure TTS, web search, image generation, etc.
+  5. Tools — configure web search, image generation, etc.
 
 Config files are stored in ~/.hermes/ for easy access.
 """
@@ -742,34 +742,6 @@ def _print_setup_summary(config: dict, hermes_home):
     else:
         tool_status.append(("Image Generation", False, "FAL_KEY"))
 
-    # TTS — show configured provider
-    tts_provider = config.get("tts", {}).get("provider", "edge")
-    if tts_provider == "elevenlabs" and get_env_value("ELEVENLABS_API_KEY"):
-        tool_status.append(("Text-to-Speech (ElevenLabs)", True, None))
-    elif tts_provider == "openai" and (
-        get_env_value("VOICE_TOOLS_OPENAI_KEY") or get_env_value("OPENAI_API_KEY")
-    ):
-        tool_status.append(("Text-to-Speech (OpenAI)", True, None))
-    elif tts_provider == "neutts":
-        try:
-            import importlib.util
-
-            neutts_ok = importlib.util.find_spec("neutts") is not None
-        except Exception:
-            neutts_ok = False
-        if neutts_ok:
-            tool_status.append(("Text-to-Speech (NeuTTS local)", True, None))
-        else:
-            tool_status.append(
-                (
-                    "Text-to-Speech (NeuTTS — not installed)",
-                    False,
-                    "run 'hermes setup tts'",
-                )
-            )
-    else:
-        tool_status.append(("Text-to-Speech (Edge TTS)", True, None))
-
     if config.get("terminal", {}).get("backend") == "modal":
         tool_status.append(("Modal Execution", True, None))
 
@@ -1175,76 +1147,6 @@ def setup_model_provider(config: dict):
             )
 
     save_config(config)
-    _setup_tts_provider(config)
-
-
-# =============================================================================
-def _setup_tts_provider(config: dict):
-    """Interactive TTS provider selection."""
-    tts_config = config.get("tts", {})
-    current_provider = tts_config.get("provider", "edge")
-
-    provider_labels = {
-        "edge": "Edge TTS",
-        "elevenlabs": "ElevenLabs",
-        "openai": "OpenAI TTS",
-        "neutts": "NeuTTS",
-    }
-    current_label = provider_labels.get(current_provider, current_provider)
-
-    print()
-    print_header("Text-to-Speech Provider (optional)")
-    print_info(f"Current: {current_label}")
-    print()
-
-    choices = [
-        "Edge TTS (free, cloud-based, no setup needed)",
-        "ElevenLabs (premium quality, needs API key)",
-        "OpenAI TTS (good quality, needs API key)",
-        "NeuTTS (local on-device, free, requires manual install)",
-    ]
-    providers = ["edge", "elevenlabs", "openai", "neutts"]
-    choices.append(f"Keep current ({current_label})")
-    keep_current_idx = len(choices) - 1
-    idx = prompt_choice("Select TTS provider:", choices, keep_current_idx)
-
-    if idx == keep_current_idx:
-        return
-
-    selected = providers[idx]
-
-    if selected == "elevenlabs":
-        existing = get_env_value("ELEVENLABS_API_KEY")
-        if not existing:
-            print()
-            api_key = prompt("ElevenLabs API key", password=True)
-            if api_key:
-                save_env_value("ELEVENLABS_API_KEY", api_key)
-                print_success("ElevenLabs API key saved")
-            else:
-                print_warning("No API key provided. Falling back to Edge TTS.")
-                selected = "edge"
-
-    elif selected == "openai":
-        existing = get_env_value("VOICE_TOOLS_OPENAI_KEY") or get_env_value(
-            "OPENAI_API_KEY"
-        )
-        if not existing:
-            print()
-            api_key = prompt("OpenAI API key for TTS", password=True)
-            if api_key:
-                save_env_value("VOICE_TOOLS_OPENAI_KEY", api_key)
-                print_success("OpenAI TTS API key saved")
-            else:
-                print_warning("No API key provided. Falling back to Edge TTS.")
-                selected = "edge"
-
-    # Save the selection
-    if "tts" not in config:
-        config["tts"] = {}
-    config["tts"]["provider"] = selected
-    save_config(config)
-    print_success(f"TTS provider set to: {provider_labels.get(selected, selected)}")
 
 
 # =============================================================================
@@ -2366,8 +2268,6 @@ def _get_section_config_summary(config: dict, section_key: str) -> Optional[str]
 
     elif section_key == "tools":
         tools = []
-        if get_env_value("ELEVENLABS_API_KEY"):
-            tools.append("TTS/ElevenLabs")
         if get_env_value("BROWSERBASE_API_KEY"):
             tools.append("Browser")
         if get_env_value("FIRECRAWL_API_KEY"):
@@ -2512,9 +2412,7 @@ SETUP_SECTIONS = [
     ("agent", "Agent Settings", setup_agent_settings),
 ]
 
-# The returning-user menu intentionally omits standalone TTS because model setup
-# already includes TTS selection and tools setup covers the rest of the provider
-# configuration. Keep this list in the same order as the visible menu entries.
+# Keep this list in the same order as the visible menu entries.
 RETURNING_USER_MENU_SECTION_KEYS = [
     "model",
     "terminal",
@@ -2672,8 +2570,6 @@ def run_setup_wizard(args):
             return
         elif 3 <= choice <= 7:
             # Individual section — map by key, not by position.
-            # SETUP_SECTIONS includes TTS but the returning-user menu skips it,
-            # so positional indexing (choice - 3) would dispatch the wrong section.
             section_key = RETURNING_USER_MENU_SECTION_KEYS[choice - 3]
             section = next((s for s in SETUP_SECTIONS if s[0] == section_key), None)
             if section:
@@ -2690,7 +2586,7 @@ def run_setup_wizard(args):
         print_info("  2. Terminal Backend — where your agent runs commands")
         print_info("  3. Agent Settings — iterations, compression, session reset")
         print_info("  4. Messaging Platforms — connect Telegram, Discord, etc.")
-        print_info("  5. Tools — configure TTS, web search, image generation, etc.")
+        print_info("  5. Tools — configure web search, image generation, etc.")
         print()
         print_info("Press Enter to begin, or Ctrl+C to exit.")
         try:

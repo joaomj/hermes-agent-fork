@@ -44,8 +44,14 @@ class TestNonInteractiveSetup:
             patch("hermes_cli.setup.ensure_hermes_home"),
             patch("hermes_cli.setup.load_config", return_value={}),
             patch("hermes_cli.setup.get_hermes_home", return_value="/tmp/.hermes"),
-            patch("hermes_cli.auth.get_active_provider", side_effect=AssertionError("wizard continued")),
-            patch("builtins.input", side_effect=AssertionError("input should not be called")),
+            patch(
+                "hermes_cli.auth.get_active_provider",
+                side_effect=AssertionError("wizard continued"),
+            ),
+            patch(
+                "builtins.input",
+                side_effect=AssertionError("input should not be called"),
+            ),
         ):
             run_setup_wizard(args)
 
@@ -62,9 +68,15 @@ class TestNonInteractiveSetup:
             patch("hermes_cli.setup.ensure_hermes_home"),
             patch("hermes_cli.setup.load_config", return_value={}),
             patch("hermes_cli.setup.get_hermes_home", return_value="/tmp/.hermes"),
-            patch("hermes_cli.auth.get_active_provider", side_effect=AssertionError("wizard continued")),
+            patch(
+                "hermes_cli.auth.get_active_provider",
+                side_effect=AssertionError("wizard continued"),
+            ),
             patch("sys.stdin") as mock_stdin,
-            patch("builtins.input", side_effect=AssertionError("input should not be called")),
+            patch(
+                "builtins.input",
+                side_effect=AssertionError("input should not be called"),
+            ),
         ):
             mock_stdin.isatty.return_value = False
             run_setup_wizard(args)
@@ -82,7 +94,10 @@ class TestNonInteractiveSetup:
             patch("hermes_cli.main._has_any_provider_configured", return_value=False),
             patch("hermes_cli.main.cmd_setup") as mock_setup,
             patch("sys.stdin") as mock_stdin,
-            patch("builtins.input", side_effect=AssertionError("input should not be called")),
+            patch(
+                "builtins.input",
+                side_effect=AssertionError("input should not be called"),
+            ),
         ):
             mock_stdin.isatty.return_value = False
             with pytest.raises(SystemExit) as exc:
@@ -93,14 +108,15 @@ class TestNonInteractiveSetup:
         out = capsys.readouterr().out
         assert "hermes config set model.provider custom" in out
 
-    def test_returning_user_terminal_menu_choice_dispatches_terminal_section(self, tmp_path):
-        """Returning-user menu should map Terminal Backend to the terminal setup, not TTS."""
+    def test_returning_user_terminal_menu_choice_dispatches_terminal_section(
+        self, tmp_path
+    ):
+        """Returning-user menu should map Terminal Backend to the terminal setup."""
         from hermes_cli import setup as setup_mod
 
         args = _make_setup_args()
         config = {}
         model_section = MagicMock()
-        tts_section = MagicMock()
         terminal_section = MagicMock()
         gateway_section = MagicMock()
         tools_section = MagicMock()
@@ -114,7 +130,9 @@ class TestNonInteractiveSetup:
             patch.object(
                 setup_mod,
                 "get_env_value",
-                side_effect=lambda key: "sk-test" if key == "OPENROUTER_API_KEY" else "",
+                side_effect=lambda key: (
+                    "sk-test" if key == "OPENROUTER_API_KEY" else ""
+                ),
             ),
             patch("hermes_cli.auth.get_active_provider", return_value=None),
             patch.object(setup_mod, "prompt_choice", return_value=4),
@@ -123,7 +141,6 @@ class TestNonInteractiveSetup:
                 "SETUP_SECTIONS",
                 [
                     ("model", "Model & Provider", model_section),
-                    ("tts", "Text-to-Speech", tts_section),
                     ("terminal", "Terminal Backend", terminal_section),
                     ("gateway", "Messaging Platforms (Gateway)", gateway_section),
                     ("tools", "Tools", tools_section),
@@ -136,4 +153,3 @@ class TestNonInteractiveSetup:
             setup_mod.run_setup_wizard(args)
 
         terminal_section.assert_called_once_with(config)
-        tts_section.assert_not_called()
