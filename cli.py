@@ -6103,7 +6103,6 @@ class HermesCLI:
                         conversation_history=self.conversation_history[
                             :-1
                         ],  # Exclude the message we just added
-                        stream_callback=stream_callback,
                         task_id=self.session_id,
                     )
                 except Exception as exc:
