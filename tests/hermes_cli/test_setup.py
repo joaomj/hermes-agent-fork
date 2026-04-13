@@ -4,8 +4,11 @@ select_provider_and_model() and config dict sync."""
 import sys
 import types
 
+import pytest
+
 from hermes_cli.auth import get_active_provider
 from hermes_cli.config import load_config, save_config
+from hermes_cli import setup as setup_mod
 from hermes_cli.setup import setup_model_provider
 
 
@@ -141,6 +144,110 @@ def test_setup_custom_providers_synced(tmp_path, monkeypatch):
     assert reloaded.get("custom_providers") == [
         {"name": "Local", "base_url": "http://localhost:8080/v1"}
     ]
+
+
+def test_setup_gateway_skips_service_install_when_systemctl_missing(monkeypatch, capsys):
+    env = {
+        "TELEGRAM_BOT_TOKEN": "",
+        "TELEGRAM_HOME_CHANNEL": "",
+        "DISCORD_BOT_TOKEN": "",
+        "DISCORD_HOME_CHANNEL": "",
+        "SLACK_BOT_TOKEN": "",
+        "SLACK_HOME_CHANNEL": "",
+        "MATRIX_HOMESERVER": "https://matrix.example.com",
+        "MATRIX_USER_ID": "@alice:example.com",
+        "MATRIX_PASSWORD": "",
+        "MATRIX_ACCESS_TOKEN": "token",
+        "BLUEBUBBLES_SERVER_URL": "",
+        "BLUEBUBBLES_HOME_CHANNEL": "",
+        "WHATSAPP_ENABLED": "",
+        "WEBHOOK_ENABLED": "",
+    }
+
+    monkeypatch.setattr(setup_mod, "get_env_value", lambda key: env.get(key, ""))
+    monkeypatch.setattr(setup_mod, "prompt_yes_no", lambda *args, **kwargs: False)
+    monkeypatch.setattr("platform.system", lambda: "Linux")
+
+    import hermes_cli.gateway as gateway_mod
+
+    monkeypatch.setattr(gateway_mod, "supports_systemd_services", lambda: False)
+    monkeypatch.setattr(gateway_mod, "is_macos", lambda: False)
+    monkeypatch.setattr(gateway_mod, "_is_service_installed", lambda: False)
+    monkeypatch.setattr(gateway_mod, "_is_service_running", lambda: False)
+
+    setup_mod.setup_gateway({})
+
+    out = capsys.readouterr().out
+    assert "Messaging platforms configured!" in out
+    assert "Start the gateway to bring your bots online:" in out
+    assert "hermes gateway" in out
+
+
+def test_setup_gateway_in_container_shows_docker_guidance(monkeypatch, capsys):
+    """setup_gateway() in a Docker container shows Docker-specific restart instructions."""
+    env = {
+        "TELEGRAM_BOT_TOKEN": "",
+        "TELEGRAM_HOME_CHANNEL": "",
+        "DISCORD_BOT_TOKEN": "",
+        "DISCORD_HOME_CHANNEL": "",
+        "SLACK_BOT_TOKEN": "",
+        "SLACK_HOME_CHANNEL": "",
+        "MATRIX_HOMESERVER": "https://matrix.example.com",
+        "MATRIX_USER_ID": "@alice:example.com",
+        "MATRIX_PASSWORD": "",
+        "MATRIX_ACCESS_TOKEN": "token",
+        "BLUEBUBBLES_SERVER_URL": "",
+        "BLUEBUBBLES_HOME_CHANNEL": "",
+        "WHATSAPP_ENABLED": "",
+        "WEBHOOK_ENABLED": "",
+    }
+
+    monkeypatch.setattr(setup_mod, "get_env_value", lambda key: env.get(key, ""))
+    monkeypatch.setattr(setup_mod, "prompt_yes_no", lambda *args, **kwargs: False)
+    monkeypatch.setattr("platform.system", lambda: "Linux")
+
+    import hermes_cli.gateway as gateway_mod
+
+    monkeypatch.setattr(gateway_mod, "supports_systemd_services", lambda: False)
+    monkeypatch.setattr(gateway_mod, "is_macos", lambda: False)
+    monkeypatch.setattr(gateway_mod, "_is_service_installed", lambda: False)
+    monkeypatch.setattr(gateway_mod, "_is_service_running", lambda: False)
+
+    # Patch is_container at the import location in setup.py
+    import hermes_constants
+    monkeypatch.setattr(hermes_constants, "is_container", lambda: True)
+
+    setup_mod.setup_gateway({})
+
+    out = capsys.readouterr().out
+    assert "Messaging platforms configured!" in out
+    assert "docker" in out.lower() or "Docker" in out
+    assert "restart" in out.lower()
+
+
+def test_setup_syncs_custom_provider_removal_from_disk(tmp_path, monkeypatch):
+    """Removing the last custom provider in model setup should persist."""
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+    _clear_provider_env(monkeypatch)
+    _stub_tts(monkeypatch)
+
+    config = load_config()
+    config["custom_providers"] = [{"name": "Local", "base_url": "http://localhost:8080/v1"}]
+    save_config(config)
+
+    def fake_select():
+        cfg = load_config()
+        cfg["model"] = {"provider": "openrouter", "default": "anthropic/claude-opus-4.6"}
+        cfg["custom_providers"] = []
+        save_config(cfg)
+
+    monkeypatch.setattr("hermes_cli.main.select_provider_and_model", fake_select)
+
+    setup_model_provider(config)
+    save_config(config)
+
+    reloaded = load_config()
+    assert reloaded.get("custom_providers") == []
 
 
 def test_setup_cancel_preserves_existing_config(tmp_path, monkeypatch):

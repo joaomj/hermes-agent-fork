@@ -20,3 +20,9 @@ def test_matrix_extra_removed_from_optional_dependencies():
 
     assert "matrix" not in optional_dependencies
     assert "hermes-agent[matrix]" not in optional_dependencies["all"]
+    # Must be present with a Linux platform marker.
+    linux_gated = [
+        dep for dep in optional_dependencies["all"]
+        if "matrix" in dep and "linux" in dep
+    ]
+    assert linux_gated, "expected hermes-agent[matrix] with sys_platform=='linux' marker in [all]"

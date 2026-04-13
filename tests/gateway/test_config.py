@@ -109,6 +109,7 @@ class TestGatewayConfigRoundtrip:
             reset_triggers=["/new"],
             quick_commands={"limits": {"type": "exec", "command": "echo ok"}},
             group_sessions_per_user=False,
+            thread_sessions_per_user=True,
         )
         d = config.to_dict()
         restored = GatewayConfig.from_dict(d)
@@ -120,6 +121,7 @@ class TestGatewayConfigRoundtrip:
             "limits": {"type": "exec", "command": "echo ok"}
         }
         assert restored.group_sessions_per_user is False
+        assert restored.thread_sessions_per_user is True
 
     def test_roundtrip_preserves_unauthorized_dm_behavior(self):
         config = GatewayConfig(

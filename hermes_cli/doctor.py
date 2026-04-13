@@ -40,6 +40,7 @@ _PROVIDER_ENV_HINTS = (
     "ANTHROPIC_API_KEY",
     "ANTHROPIC_TOKEN",
     "OPENAI_BASE_URL",
+    "NOUS_API_KEY",
     "GLM_API_KEY",
     "ZAI_API_KEY",
     "Z_AI_API_KEY",
@@ -47,7 +48,40 @@ _PROVIDER_ENV_HINTS = (
     "MINIMAX_API_KEY",
     "MINIMAX_CN_API_KEY",
     "KILOCODE_API_KEY",
+    "DEEPSEEK_API_KEY",
+    "DASHSCOPE_API_KEY",
+    "HF_TOKEN",
+    "AI_GATEWAY_API_KEY",
+    "OPENCODE_ZEN_API_KEY",
+    "OPENCODE_GO_API_KEY",
+    "XIAOMI_API_KEY",
 )
+
+
+from hermes_constants import is_termux as _is_termux
+
+
+def _python_install_cmd() -> str:
+    return "python -m pip install" if _is_termux() else "uv pip install"
+
+
+def _system_package_install_cmd(pkg: str) -> str:
+    if _is_termux():
+        return f"pkg install {pkg}"
+    if sys.platform == "darwin":
+        return f"brew install {pkg}"
+    return f"sudo apt install {pkg}"
+
+
+def _termux_browser_setup_steps(node_installed: bool) -> list[str]:
+    steps: list[str] = []
+    step = 1
+    if not node_installed:
+        steps.append(f"{step}) pkg install nodejs")
+        step += 1
+    steps.append(f"{step}) npm install -g agent-browser")
+    steps.append(f"{step + 1}) agent-browser install")
+    return steps
 
 
 def _has_provider_env_config(content: str) -> bool:
@@ -434,6 +468,31 @@ def run_doctor(args):
             f"{_DHH}/state.db not created yet (will be created on first session)"
         )
 
+    # Check WAL file size (unbounded growth indicates missed checkpoints)
+    wal_path = hermes_home / "state.db-wal"
+    if wal_path.exists():
+        try:
+            wal_size = wal_path.stat().st_size
+            if wal_size > 50 * 1024 * 1024:  # 50 MB
+                check_warn(
+                    f"WAL file is large ({wal_size // (1024*1024)} MB)",
+                    "(may indicate missed checkpoints)"
+                )
+                if should_fix:
+                    import sqlite3
+                    conn = sqlite3.connect(str(state_db_path))
+                    conn.execute("PRAGMA wal_checkpoint(PASSIVE)")
+                    conn.close()
+                    new_size = wal_path.stat().st_size if wal_path.exists() else 0
+                    check_ok(f"WAL checkpoint performed ({wal_size // 1024}K → {new_size // 1024}K)")
+                    fixed_count += 1
+                else:
+                    issues.append("Large WAL file — run 'hermes doctor --fix' to checkpoint")
+            elif wal_size > 10 * 1024 * 1024:  # 10 MB
+                check_info(f"WAL file is {wal_size // (1024*1024)} MB (normal for active sessions)")
+        except Exception:
+            pass
+
     _check_gateway_service_linger(issues)
 
     # =========================================================================
@@ -519,7 +578,14 @@ def run_doctor(args):
         if agent_browser_path.exists():
             check_ok("agent-browser (Node.js)", "(browser automation)")
         else:
-            check_warn("agent-browser not installed", "(run: npm install)")
+            if _is_termux():
+                check_info("agent-browser is not installed (expected in the tested Termux path)")
+                check_info("Install it manually later with: npm install -g agent-browser && agent-browser install")
+                check_info("Termux browser setup:")
+                for step in _termux_browser_setup_steps(node_installed=True):
+                    check_info(step)
+            else:
+                check_warn("agent-browser not installed", "(run: npm install)")
     else:
         check_warn("Node.js not found", "(optional, needed for browser tools)")
 
@@ -642,7 +708,7 @@ def run_doctor(args):
                 f"\r  {color('⚠', Colors.YELLOW)} Anthropic API {color(f'({e})', Colors.DIM)}                 "
             )
 
-    # -- API-key providers (Z.AI/GLM, Kimi, MiniMax, MiniMax-CN) --
+    # -- API-key providers --
     # Tuple: (name, env_vars, default_url, base_env, supports_models_endpoint)
     # If supports_models_endpoint is False, we skip the health check and just show "configured"
     _apikey_providers = [
@@ -712,10 +778,15 @@ def run_doctor(args):
                 # Auto-detect Kimi Code keys (sk-kimi-) → api.kimi.com
                 if not _base and _key.startswith("sk-kimi-"):
                     _base = "https://api.kimi.com/coding/v1"
+                # Anthropic-compat endpoints (/anthropic) don't support /models.
+                # Rewrite to the OpenAI-compat /v1 surface for health checks.
+                if _base and _base.rstrip("/").endswith("/anthropic"):
+                    from agent.auxiliary_client import _to_openai_base_url
+                    _base = _to_openai_base_url(_base)
                 _url = (_base.rstrip("/") + "/models") if _base else _default_url
                 _headers = {"Authorization": f"Bearer {_key}"}
                 if "api.kimi.com" in _url.lower():
-                    _headers["User-Agent"] = "KimiCLI/1.0"
+                    _headers["User-Agent"] = "KimiCLI/1.30.0"
                 _resp = httpx.get(
                     _url,
                     headers=_headers,
@@ -820,11 +891,12 @@ def run_doctor(args):
         )
 
     # =========================================================================
-    # Honcho memory
+    # Memory Provider (only check the active provider, if any)
     # =========================================================================
     print()
-    print(color("◆ Honcho Memory", Colors.CYAN, Colors.BOLD))
+    print(color("◆ Memory Provider", Colors.CYAN, Colors.BOLD))
 
+    _active_memory_provider = ""
     try:
         from plugins.memory.honcho.client import HonchoClientConfig, resolve_config_path
 
@@ -907,8 +979,8 @@ def run_doctor(args):
                         pass
     except ImportError:
         pass
-    except Exception as _e:
-        logger.debug("Profile health check failed: %s", _e)
+    except Exception:
+        pass
 
     # =========================================================================
     # Summary

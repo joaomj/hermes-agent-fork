@@ -11,20 +11,22 @@ from agent.prompt_builder import (
     _scan_context_content,
     _truncate_content,
     _parse_skill_file,
-    _read_skill_conditions,
     _skill_should_show,
     _find_hermes_md,
     _find_git_root,
     _strip_yaml_frontmatter,
     build_skills_system_prompt,
     build_context_files_prompt,
+    build_environment_hints,
     CONTEXT_FILE_MAX_CHARS,
     DEFAULT_AGENT_IDENTITY,
     TOOL_USE_ENFORCEMENT_GUIDANCE,
     TOOL_USE_ENFORCEMENT_MODELS,
+    OPENAI_MODEL_EXECUTION_GUIDANCE,
     MEMORY_GUIDANCE,
     SESSION_SEARCH_GUIDANCE,
     PLATFORM_HINTS,
+    WSL_ENVIRONMENT_HINT,
 )
 
 
@@ -726,7 +728,7 @@ class TestPromptBuilderConstants:
 
 
 # =========================================================================
-# Conditional skill activation
+# Environment hints
 # =========================================================================
 
 
@@ -740,21 +742,18 @@ class TestReadSkillConditions:
         assert conditions["fallback_for_tools"] == []
         assert conditions["requires_tools"] == []
 
-    def test_reads_fallback_for_toolsets(self, tmp_path):
-        skill_file = tmp_path / "SKILL.md"
-        skill_file.write_text(
-            "---\nname: ddg\ndescription: DuckDuckGo\nmetadata:\n  hermes:\n    fallback_for_toolsets: [web]\n---\n"
-        )
-        conditions = _read_skill_conditions(skill_file)
-        assert conditions["fallback_for_toolsets"] == ["web"]
+    def test_build_environment_hints_on_wsl(self, monkeypatch):
+        import agent.prompt_builder as _pb
+        monkeypatch.setattr(_pb, "is_wsl", lambda: True)
+        result = _pb.build_environment_hints()
+        assert "/mnt/" in result
+        assert "WSL" in result
 
-    def test_reads_requires_toolsets(self, tmp_path):
-        skill_file = tmp_path / "SKILL.md"
-        skill_file.write_text(
-            "---\nname: openhue\ndescription: Hue lights\nmetadata:\n  hermes:\n    requires_toolsets: [terminal]\n---\n"
-        )
-        conditions = _read_skill_conditions(skill_file)
-        assert conditions["requires_toolsets"] == ["terminal"]
+    def test_build_environment_hints_not_wsl(self, monkeypatch):
+        import agent.prompt_builder as _pb
+        monkeypatch.setattr(_pb, "is_wsl", lambda: False)
+        result = _pb.build_environment_hints()
+        assert result == ""
 
     def test_reads_multiple_conditions(self, tmp_path):
         skill_file = tmp_path / "SKILL.md"
@@ -786,6 +785,9 @@ class TestReadSkillConditions:
         assert "Failed to read skill conditions" in caplog.text
         assert str(skill_file) in caplog.text
 
+# =========================================================================
+# Conditional skill activation
+# =========================================================================
 
 class TestSkillShouldShow:
     def test_no_filter_info_always_shows(self):
@@ -1016,8 +1018,46 @@ class TestToolUseEnforcementGuidance:
     def test_enforcement_models_includes_codex(self):
         assert "codex" in TOOL_USE_ENFORCEMENT_MODELS
 
+    def test_enforcement_models_includes_grok(self):
+        assert "grok" in TOOL_USE_ENFORCEMENT_MODELS
+
     def test_enforcement_models_is_tuple(self):
         assert isinstance(TOOL_USE_ENFORCEMENT_MODELS, tuple)
+
+
+class TestOpenAIModelExecutionGuidance:
+    """Tests for GPT/Codex-specific execution discipline guidance."""
+
+    def test_guidance_covers_tool_persistence(self):
+        text = OPENAI_MODEL_EXECUTION_GUIDANCE.lower()
+        assert "tool_persistence" in text
+        assert "retry" in text
+        assert "empty" in text or "partial" in text
+
+    def test_guidance_covers_prerequisite_checks(self):
+        text = OPENAI_MODEL_EXECUTION_GUIDANCE.lower()
+        assert "prerequisite" in text
+        assert "dependency" in text
+
+    def test_guidance_covers_verification(self):
+        text = OPENAI_MODEL_EXECUTION_GUIDANCE.lower()
+        assert "verification" in text or "verify" in text
+        assert "correctness" in text
+
+    def test_guidance_covers_missing_context(self):
+        text = OPENAI_MODEL_EXECUTION_GUIDANCE.lower()
+        assert "missing_context" in text or "missing context" in text
+        assert "hallucinate" in text or "guess" in text
+
+    def test_guidance_uses_xml_tags(self):
+        assert "<tool_persistence>" in OPENAI_MODEL_EXECUTION_GUIDANCE
+        assert "</tool_persistence>" in OPENAI_MODEL_EXECUTION_GUIDANCE
+        assert "<verification>" in OPENAI_MODEL_EXECUTION_GUIDANCE
+        assert "</verification>" in OPENAI_MODEL_EXECUTION_GUIDANCE
+
+    def test_guidance_is_string(self):
+        assert isinstance(OPENAI_MODEL_EXECUTION_GUIDANCE, str)
+        assert len(OPENAI_MODEL_EXECUTION_GUIDANCE) > 100
 
 
 # =========================================================================
@@ -1025,10 +1065,6 @@ class TestToolUseEnforcementGuidance:
 # =========================================================================
 
 
-class TestStripBudgetWarningsFromHistory:
-    def test_strips_json_budget_warning_key(self):
-        import json
-        from run_agent import _strip_budget_warnings_from_history
 
         messages = [
             {

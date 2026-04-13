@@ -11,6 +11,8 @@ import re
 import ssl
 import time
 
+from agent.redact import redact_sensitive_text
+
 logger = logging.getLogger(__name__)
 
 _TELEGRAM_TOPIC_TARGET_RE = re.compile(r"^\s*(-?\d+)(?::(\d+))?\s*$")
@@ -18,6 +20,27 @@ _IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 _VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".3gp"}
 _AUDIO_EXTS = {".ogg", ".opus", ".mp3", ".wav", ".m4a"}
 _VOICE_EXTS = {".ogg", ".opus"}
+_URL_SECRET_QUERY_RE = re.compile(
+    r"([?&](?:access_token|api[_-]?key|auth[_-]?token|token|signature|sig)=)([^&#\s]+)",
+    re.IGNORECASE,
+)
+_GENERIC_SECRET_ASSIGN_RE = re.compile(
+    r"\b(access_token|api[_-]?key|auth[_-]?token|signature|sig)\s*=\s*([^\s,;]+)",
+    re.IGNORECASE,
+)
+
+
+def _sanitize_error_text(text) -> str:
+    """Redact secrets from error text before surfacing it to users/models."""
+    redacted = redact_sensitive_text(text)
+    redacted = _URL_SECRET_QUERY_RE.sub(lambda m: f"{m.group(1)}***", redacted)
+    redacted = _GENERIC_SECRET_ASSIGN_RE.sub(lambda m: f"{m.group(1)}=***", redacted)
+    return redacted
+
+
+def _error(message: str) -> dict:
+    """Build a standardized error payload with redacted content."""
+    return {"error": _sanitize_error_text(message)}
 
 
 SEND_MESSAGE_SCHEMA = {
@@ -66,7 +89,7 @@ def _handle_list():
 
         return json.dumps({"targets": format_directory_for_display()})
     except Exception as e:
-        return json.dumps({"error": f"Failed to load channel directory: {e}"})
+        return json.dumps(_error(f"Failed to load channel directory: {e}"))
 
 
 def _handle_send(args):
@@ -115,14 +138,14 @@ def _handle_send(args):
     from tools.interrupt import is_interrupted
 
     if is_interrupted():
-        return json.dumps({"error": "Interrupted"})
+        return tool_error("Interrupted")
 
     try:
         from gateway.config import load_gateway_config, Platform
 
         config = load_gateway_config()
     except Exception as e:
-        return json.dumps({"error": f"Failed to load gateway config: {e}"})
+        return json.dumps(_error(f"Failed to load gateway config: {e}"))
 
     platform_map = {
         "telegram": Platform.TELEGRAM,
@@ -201,9 +224,11 @@ def _handle_send(args):
             except Exception:
                 pass
 
+        if isinstance(result, dict) and "error" in result:
+            result["error"] = _sanitize_error_text(result["error"])
         return json.dumps(result)
     except Exception as e:
-        return json.dumps({"error": f"Send failed: {e}"})
+        return json.dumps(_error(f"Send failed: {e}"))
 
 
 def _parse_target_ref(platform_name: str, target_ref: str):
@@ -297,6 +322,13 @@ async def _send_to_platform(
     from gateway.platforms.telegram import TelegramAdapter
 
     media_files = media_files or []
+
+    if platform == Platform.SLACK and message:
+        try:
+            slack_adapter = SlackAdapter.__new__(SlackAdapter)
+            message = slack_adapter.format_message(message)
+        except Exception:
+            logger.debug("Failed to apply Slack mrkdwn formatting in _send_to_platform", exc_info=True)
 
     # Platform message length limits (from adapter class attributes)
     _MAX_LENGTHS = {
@@ -441,7 +473,7 @@ async def _send_telegram(token, chat_id, message, media_files=None, thread_id=No
                             chat_id=int_chat_id, document=f, **thread_kwargs
                         )
             except Exception as e:
-                warning = f"Failed to send media {media_path}: {e}"
+                warning = _sanitize_error_text(f"Failed to send media {media_path}: {e}")
                 logger.error(warning)
                 warnings.append(warning)
 
@@ -465,12 +497,13 @@ async def _send_telegram(token, chat_id, message, media_files=None, thread_id=No
             "error": "python-telegram-bot not installed. Run: pip install python-telegram-bot"
         }
     except Exception as e:
-        return {"error": f"Telegram send failed: {e}"}
+        return _error(f"Telegram send failed: {e}")
 
 
 def _check_send_message():
     """Gate send_message on gateway running (always available on messaging platforms)."""
-    platform = os.getenv("HERMES_SESSION_PLATFORM", "")
+    from gateway.session_context import get_session_env
+    platform = get_session_env("HERMES_SESSION_PLATFORM", "")
     if platform and platform != "local":
         return True
     try:
@@ -482,7 +515,7 @@ def _check_send_message():
 
 
 # --- Registry ---
-from tools.registry import registry
+from tools.registry import registry, tool_error
 
 registry.register(
     name="send_message",

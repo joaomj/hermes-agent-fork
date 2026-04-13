@@ -558,8 +558,24 @@ async def process_content_with_llm(
         return processed_content
 
     except Exception as e:
-        logger.debug("Error processing content with LLM: %s", e)
-        return f"[Failed to process content: {str(e)[:100]}. Content size: {len(content):,} chars]"
+        logger.warning(
+            "web_extract LLM summarization failed (%s). "
+            "Tip: increase auxiliary.web_extract.timeout in config.yaml "
+            "or switch to a faster auxiliary model.",
+            str(e)[:120],
+        )
+        # Fall back to truncated raw content instead of returning a useless
+        # error message.  The first ~5000 chars are almost always more useful
+        # to the model than "[Failed to process content: ...]".
+        truncated = content[:MAX_OUTPUT_SIZE]
+        if len(content) > MAX_OUTPUT_SIZE:
+            truncated += (
+                f"\n\n[Content truncated — showing first {MAX_OUTPUT_SIZE:,} of "
+                f"{len(content):,} chars. LLM summarization timed out. "
+                f"To fix: increase auxiliary.web_extract.timeout in config.yaml, "
+                f"or use a faster auxiliary model. Use browser_navigate for the full page.]"
+            )
+        return truncated
 
 
 async def _call_summarizer_llm(
@@ -624,8 +640,9 @@ Your goal is to preserve ALL important information while reducing length. Never 
 
 Create a markdown summary that captures all key information in a well-organized, scannable format. Include important quotes and code snippets in their original formatting. Focus on actionable information, specific details, and unique insights."""
 
-    # Call the LLM with retry logic
-    max_retries = 6
+    # Call the LLM with retry logic — keep retries low since summarization
+    # is a nice-to-have; the caller falls back to truncated content on failure.
+    max_retries = 2
     retry_delay = 2
     last_error = None
 
@@ -648,6 +665,9 @@ Create a markdown summary that captures all key information in a well-organized,
                 ],
                 "temperature": 0.1,
                 "max_tokens": max_tokens,
+                # No explicit timeout — async_call_llm reads auxiliary.web_extract.timeout
+                # from config (default 360s / 6min).  Users with slow local models can
+                # increase it in config.yaml.
             }
             if extra_body:
                 call_kwargs["extra_body"] = extra_body
@@ -1118,7 +1138,7 @@ def web_search_tool(query: str, limit: int = 5) -> str:
         from tools.interrupt import is_interrupted
 
         if is_interrupted():
-            return json.dumps({"error": "Interrupted", "success": False})
+            return tool_error("Interrupted", success=False)
 
         # Dispatch to the configured backend
         backend = _get_backend()
@@ -1198,7 +1218,7 @@ def web_search_tool(query: str, limit: int = 5) -> str:
         _debug.log_call("web_search_tool", debug_call_data)
         _debug.save()
 
-        return json.dumps({"error": error_msg}, ensure_ascii=False)
+        return tool_error(error_msg)
 
 
 async def web_extract_tool(
@@ -1230,7 +1250,8 @@ async def web_extract_tool(
     Raises:
         Exception: If extraction fails or API key is not set
     """
-    # Block URLs containing embedded secrets (exfiltration prevention)
+    # Block URLs containing embedded secrets (exfiltration prevention).
+    # URL-decode first so percent-encoded secrets (%73k- = sk-) are caught.
     from agent.redact import _PREFIX_RE
 
     for _url in urls:
@@ -1680,7 +1701,7 @@ async def web_crawl_tool(
             from tools.interrupt import is_interrupted as _is_int
 
             if _is_int():
-                return json.dumps({"error": "Interrupted", "success": False})
+                return tool_error("Interrupted", success=False)
 
             logger.info("Tavily crawl: %s", url)
             payload: Dict[str, Any] = {
@@ -1859,7 +1880,7 @@ async def web_crawl_tool(
         from tools.interrupt import is_interrupted as _is_int
 
         if _is_int():
-            return json.dumps({"error": "Interrupted", "success": False})
+            return tool_error("Interrupted", success=False)
 
         try:
             crawl_result = _get_firecrawl_client().crawl(url=url, **crawl_params)
@@ -2273,7 +2294,7 @@ if __name__ == "__main__":
 # ---------------------------------------------------------------------------
 # Registry
 # ---------------------------------------------------------------------------
-from tools.registry import registry
+from tools.registry import registry, tool_error
 
 WEB_SEARCH_SCHEMA = {
     "name": "web_search",
@@ -2315,6 +2336,7 @@ registry.register(
     check_fn=check_web_api_key,
     requires_env=_web_requires_env(),
     emoji="🔍",
+    max_result_size_chars=100_000,
 )
 registry.register(
     name="web_extract",
@@ -2328,4 +2350,5 @@ registry.register(
     requires_env=_web_requires_env(),
     is_async=True,
     emoji="📄",
+    max_result_size_chars=100_000,
 )

@@ -9,8 +9,9 @@ import tools.approval as approval_module
 from tools.approval import (
     approve_session,
     check_all_command_guards,
-    clear_session,
     is_approved,
+    set_current_session_key,
+    reset_current_session_key,
 )
 
 # Ensure the module is importable so we can patch it
@@ -35,8 +36,8 @@ _TIRITH_PATCH = "tools.tirith_security.check_command_security"
 @pytest.fixture(autouse=True)
 def _clean_state():
     """Clear approval state and relevant env vars between tests."""
-    key = os.getenv("HERMES_SESSION_KEY", "default")
-    clear_session(key)
+    approval_module._session_approved.clear()
+    approval_module._pending.clear()
     approval_module._permanent_approved.clear()
     saved = {}
     for k in (
@@ -48,7 +49,8 @@ def _clean_state():
         if k in os.environ:
             saved[k] = os.environ.pop(k)
     yield
-    clear_session(key)
+    approval_module._session_approved.clear()
+    approval_module._pending.clear()
     approval_module._permanent_approved.clear()
     for k, v in saved.items():
         os.environ[k] = v

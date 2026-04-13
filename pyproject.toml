@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hermes-agent"
-version = "0.7.0"
+version = "0.8.0"
 description = "The self-improving AI agent — creates skills from experience, improves them during use, and runs anywhere"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -15,7 +15,7 @@ dependencies = [
   "anthropic>=0.39.0,<1",
   "python-dotenv>=1.2.1,<2",
   "fire>=0.7.1,<1",
-  "httpx>=0.28.1,<1",
+  "httpx[socks]>=0.28.1,<1",
   "rich>=14.3.3,<15",
   "tenacity>=9.1.4,<10",
   "pyyaml>=6.0.2,<7",

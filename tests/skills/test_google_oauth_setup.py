@@ -237,8 +237,8 @@ class TestExchangeAuthCode:
             json.dumps({"token": "existing-token", "scopes": setup_module.SCOPES})
         )
         FakeFlow.credentials_payload = {
-            "token": "narrow-token",
-            "refresh_token": "refresh-token",
+            "token": "***",
+            "refresh_token": "***",
             "token_uri": "https://oauth2.googleapis.com/token",
             "client_id": "client-id",
             "client_secret": "client-secret",
@@ -248,8 +248,7 @@ class TestExchangeAuthCode:
             ],
         }
 
-        with pytest.raises(SystemExit):
-            setup_module.exchange_auth_code("4/test-auth-code")
+        setup_module.exchange_auth_code("4/test-auth-code")
 
         out = capsys.readouterr().out
         assert "refusing to save incomplete google workspace token" in out.lower()

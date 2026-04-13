@@ -33,6 +33,7 @@ from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Any
 from pathlib import Path
 from hermes_constants import get_hermes_home
+from tools.binary_extensions import BINARY_EXTENSIONS
 
 
 # ---------------------------------------------------------------------------
@@ -891,7 +892,7 @@ class ShellFileOperations(FileOperations):
             return LintResult(skipped=True, message=f"{base_cmd} not available")
 
         # Run linter
-        cmd = linter_cmd.format(file=self._escape_shell_arg(path))
+        cmd = linter_cmd.replace("{file}", self._escape_shell_arg(path))
         result = self._exec(cmd, timeout=30)
 
         return LintResult(

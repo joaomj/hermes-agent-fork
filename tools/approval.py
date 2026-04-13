@@ -40,11 +40,18 @@ def reset_current_session_key(token: contextvars.Token[str]) -> None:
 
 
 def get_current_session_key(default: str = "default") -> str:
-    """Return the active session key, preferring context-local state."""
+    """Return the active session key, preferring context-local state.
+
+    Resolution order:
+    1. approval-specific contextvars (set by gateway before agent.run)
+    2. session_context contextvars (set by _set_session_env)
+    3. os.environ fallback (CLI, cron, tests)
+    """
     session_key = _approval_session_key.get()
     if session_key:
         return session_key
-    return os.getenv("HERMES_SESSION_KEY", default)
+    from gateway.session_context import get_session_env
+    return get_session_env("HERMES_SESSION_KEY", default)
 
 
 # Sensitive write targets that should trigger approval even when referenced
@@ -199,6 +206,7 @@ def detect_dangerous_command(command: str) -> tuple:
 _lock = threading.Lock()
 _pending: dict[str, dict] = {}
 _session_approved: dict[str, set] = {}
+_session_yolo: set[str] = set()
 _permanent_approved: set = set()
 
 # =========================================================================
@@ -286,34 +294,45 @@ def has_blocking_approval(session_key: str) -> bool:
         return bool(_gateway_queues.get(session_key))
 
 
-def pending_approval_count(session_key: str) -> int:
-    """Return the number of pending blocking approvals for a session."""
-    with _lock:
-        return len(_gateway_queues.get(session_key, []))
-
-
 def submit_pending(session_key: str, approval: dict):
     """Store a pending approval request for a session."""
     with _lock:
         _pending[session_key] = approval
 
 
-def pop_pending(session_key: str) -> Optional[dict]:
-    """Retrieve and remove a pending approval for a session."""
-    with _lock:
-        return _pending.pop(session_key, None)
-
-
-def has_pending(session_key: str) -> bool:
-    """Check if a session has a pending approval request."""
-    with _lock:
-        return session_key in _pending
-
-
 def approve_session(session_key: str, pattern_key: str):
     """Approve a pattern for this session only."""
     with _lock:
         _session_approved.setdefault(session_key, set()).add(pattern_key)
+
+
+def enable_session_yolo(session_key: str) -> None:
+    """Enable YOLO bypass for a single session key."""
+    if not session_key:
+        return
+    with _lock:
+        _session_yolo.add(session_key)
+
+
+def disable_session_yolo(session_key: str) -> None:
+    """Disable YOLO bypass for a single session key."""
+    if not session_key:
+        return
+    with _lock:
+        _session_yolo.discard(session_key)
+
+
+def is_session_yolo_enabled(session_key: str) -> bool:
+    """Return True when YOLO bypass is enabled for a specific session."""
+    if not session_key:
+        return False
+    with _lock:
+        return session_key in _session_yolo
+
+
+def is_current_session_yolo_enabled() -> bool:
+    """Return True when the active approval session has YOLO bypass enabled."""
+    return is_session_yolo_enabled(get_current_session_key(default=""))
 
 
 def is_approved(session_key: str, pattern_key: str) -> bool:
@@ -346,12 +365,14 @@ def clear_session(session_key: str):
     """Clear all approvals and pending requests for a session."""
     with _lock:
         _session_approved.pop(session_key, None)
+        _session_yolo.discard(session_key)
         _pending.pop(session_key, None)
         _gateway_notify_cbs.pop(session_key, None)
         # Signal ALL blocked threads so they don't hang forever
         entries = _gateway_queues.pop(session_key, [])
         for entry in entries:
             entry.event.set()
+
 
 
 # =========================================================================
@@ -373,7 +394,8 @@ def load_permanent_allowlist() -> set:
         if patterns:
             load_permanent(patterns)
         return patterns
-    except Exception:
+    except Exception as e:
+        logger.warning("Failed to load permanent allowlist: %s", e)
         return set()
 
 
@@ -508,7 +530,8 @@ def _get_approval_config() -> dict:
 
         config = load_config()
         return config.get("approvals", {}) or {}
-    except Exception:
+    except Exception as e:
+        logger.warning("Failed to load approval config: %s", e)
         return {}
 
 
@@ -600,8 +623,9 @@ def check_dangerous_command(
     if env_type in ("docker", "modal"):
         return {"approved": True, "message": None}
 
-    # --yolo: bypass all approval prompts
-    if os.getenv("HERMES_YOLO_MODE"):
+    # --yolo: bypass all approval prompts. Gateway /yolo is session-scoped;
+    # CLI --yolo remains process-scoped via the env var for local use.
+    if os.getenv("HERMES_YOLO_MODE") or is_current_session_yolo_enabled():
         return {"approved": True, "message": None}
 
     is_dangerous, pattern_key, description = detect_dangerous_command(command)
@@ -709,9 +733,10 @@ def check_all_command_guards(
     if env_type in ("docker", "modal"):
         return {"approved": True, "message": None}
 
-    # --yolo or approvals.mode=off: bypass all approval prompts
+    # --yolo or approvals.mode=off: bypass all approval prompts.
+    # Gateway /yolo is session-scoped; CLI --yolo remains process-scoped.
     approval_mode = _get_approval_mode()
-    if os.getenv("HERMES_YOLO_MODE") or approval_mode == "off":
+    if os.getenv("HERMES_YOLO_MODE") or is_current_session_yolo_enabled() or approval_mode == "off":
         return {"approved": True, "message": None}
 
     is_cli = os.getenv("HERMES_INTERACTIVE")
@@ -869,14 +894,17 @@ def check_all_command_guards(
 
             # User approved — persist based on scope (same logic as CLI)
             for key, _, is_tirith in warnings:
-                if choice in ("once", "session") or (choice == "always" and is_tirith):
+                if choice == "session" or (choice == "always" and is_tirith):
                     approve_session(session_key, key)
                 elif choice == "always":
                     approve_session(session_key, key)
                     approve_permanent(key)
                     save_permanent_allowlist(_permanent_approved)
+                # choice == "once": no persistence — command allowed this
+                # single time only, matching the CLI's behavior.
 
-            return {"approved": True, "message": None}
+            return {"approved": True, "message": None,
+                    "user_approved": True, "description": combined_desc}
 
         # Fallback: no gateway callback registered (e.g. cron, batch).
         # Return approval_required for backward compat.
@@ -928,4 +956,9 @@ def check_all_command_guards(
             approve_permanent(key)
             save_permanent_allowlist(_permanent_approved)
 
-    return {"approved": True, "message": None}
+    return {"approved": True, "message": None,
+            "user_approved": True, "description": combined_desc}
+
+
+# Load permanent allowlist from config on module import
+load_permanent_allowlist()

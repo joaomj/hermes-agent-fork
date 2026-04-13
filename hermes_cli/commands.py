@@ -16,8 +16,18 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from prompt_toolkit.auto_suggest import AutoSuggest, Suggestion
-from prompt_toolkit.completion import Completer, Completion
+# prompt_toolkit is an optional CLI dependency — only needed for
+# SlashCommandCompleter and SlashCommandAutoSuggest.  Gateway and test
+# environments that lack it must still be able to import this module
+# for resolve_command, gateway_help_lines, and COMMAND_REGISTRY.
+try:
+    from prompt_toolkit.auto_suggest import AutoSuggest, Suggestion
+    from prompt_toolkit.completion import Completer, Completion
+except ImportError:  # pragma: no cover
+    AutoSuggest = object  # type: ignore[assignment,misc]
+    Completer = object    # type: ignore[assignment,misc]
+    Suggestion = None     # type: ignore[assignment]
+    Completion = None     # type: ignore[assignment]
 
 
 # ---------------------------------------------------------------------------
@@ -280,12 +290,6 @@ def resolve_command(name: str) -> CommandDef | None:
     return _COMMAND_LOOKUP.get(name.lower().lstrip("/"))
 
 
-def register_plugin_command(cmd: CommandDef) -> None:
-    """Append a plugin-defined command to the registry and refresh lookups."""
-    COMMAND_REGISTRY.append(cmd)
-    rebuild_lookups()
-
-
 def rebuild_lookups() -> None:
     """Rebuild all derived lookup dicts from the current COMMAND_REGISTRY.
 
@@ -483,21 +487,46 @@ def telegram_bot_commands() -> list[tuple[str, str]]:
     for cmd in COMMAND_REGISTRY:
         if not _is_gateway_available(cmd, overrides):
             continue
-        tg_name = cmd.name.replace("-", "_")
-        result.append((tg_name, cmd.description))
+        tg_name = _sanitize_telegram_name(cmd.name)
+        if tg_name:
+            result.append((tg_name, cmd.description))
     return result
 
 
-_TG_NAME_LIMIT = 32
+_CMD_NAME_LIMIT = 32
+"""Max command name length shared by Telegram and Discord."""
+
+# Backward-compat alias — tests and external code may reference the old name.
+_TG_NAME_LIMIT = _CMD_NAME_LIMIT
+
+# Telegram Bot API allows only lowercase a-z, 0-9, and underscores in
+# command names.  This regex strips everything else after initial conversion.
+_TG_INVALID_CHARS = re.compile(r"[^a-z0-9_]")
+_TG_MULTI_UNDERSCORE = re.compile(r"_{2,}")
 
 
-def _clamp_telegram_names(
+def _sanitize_telegram_name(raw: str) -> str:
+    """Convert a command/skill/plugin name to a valid Telegram command name.
+
+    Telegram requires: 1-32 chars, lowercase a-z, digits 0-9, underscores only.
+    Steps: lowercase → replace hyphens with underscores → strip all other
+    invalid characters → collapse consecutive underscores → strip leading/
+    trailing underscores.
+    """
+    name = raw.lower().replace("-", "_")
+    name = _TG_INVALID_CHARS.sub("", name)
+    name = _TG_MULTI_UNDERSCORE.sub("_", name)
+    return name.strip("_")
+
+
+def _clamp_command_names(
     entries: list[tuple[str, str]],
     reserved: set[str],
 ) -> list[tuple[str, str]]:
-    """Enforce Telegram's 32-char command name limit with collision avoidance.
+    """Enforce 32-char command name limit with collision avoidance.
 
-    Names exceeding 32 chars are truncated.  If truncation creates a duplicate
+    Both Telegram and Discord cap slash command names at 32 characters.
+    Names exceeding the limit are truncated.  If truncation creates a duplicate
     (against *reserved* names or earlier entries in the same batch), the name is
     shortened to 31 chars and a digit ``0``-``9`` is appended to differentiate.
     If all 10 digit slots are taken the entry is silently dropped.
@@ -505,8 +534,8 @@ def _clamp_telegram_names(
     used: set[str] = set(reserved)
     result: list[tuple[str, str]] = []
     for name, desc in entries:
-        if len(name) > _TG_NAME_LIMIT:
-            candidate = name[:_TG_NAME_LIMIT]
+        if len(name) > _CMD_NAME_LIMIT:
+            candidate = name[:_CMD_NAME_LIMIT]
             if candidate in used:
                 prefix = name[: _TG_NAME_LIMIT - 1]
                 for digit in range(10):
@@ -544,7 +573,6 @@ def telegram_menu_commands(
         skill commands omitted due to the cap.
     """
     core_commands = list(telegram_bot_commands())
-    # Reserve core names so plugin/skill truncation can't collide with them
     reserved_names = {n for n, _ in core_commands}
     all_commands = list(core_commands)
 
@@ -616,8 +644,15 @@ def telegram_menu_commands(
 
     # Skills fill remaining slots — they're the only tier that gets trimmed
     remaining_slots = max(0, max_commands - len(all_commands))
-    hidden_count = max(0, len(skill_entries) - remaining_slots)
-    all_commands.extend(skill_entries[:remaining_slots])
+    entries, hidden_count = _collect_gateway_skill_entries(
+        platform="telegram",
+        max_slots=remaining_slots,
+        reserved_names=reserved_names,
+        desc_limit=40,
+        sanitize_name=_sanitize_telegram_name,
+    )
+    # Drop the cmd_key — Telegram only needs (name, desc) pairs.
+    all_commands.extend((n, d) for n, d, _k in entries)
     return all_commands[:max_commands], hidden_count
 
 
@@ -635,6 +670,15 @@ class SlashCommandCompleter(Completer):
         | None = None,
     ) -> None:
         self._skill_commands_provider = skill_commands_provider
+        self._command_filter = command_filter
+
+    def _command_allowed(self, slash_command: str) -> bool:
+        if self._command_filter is None:
+            return True
+        try:
+            return bool(self._command_filter(slash_command))
+        except Exception:
+            return True
 
     def _iter_skill_commands(self) -> Mapping[str, dict[str, Any]]:
         if self._skill_commands_provider is None:
@@ -854,6 +898,39 @@ class SlashCommandCompleter(Completer):
             )
             count += 1
 
+    def _model_completions(self, sub_text: str, sub_lower: str):
+        """Yield completions for /model from config aliases + built-in aliases."""
+        seen = set()
+        # Config-based direct aliases (preferred — include provider info)
+        try:
+            from hermes_cli.model_switch import (
+                _ensure_direct_aliases, DIRECT_ALIASES, MODEL_ALIASES,
+            )
+            _ensure_direct_aliases()
+            for name, da in DIRECT_ALIASES.items():
+                if name.startswith(sub_lower) and name != sub_lower:
+                    seen.add(name)
+                    yield Completion(
+                        name,
+                        start_position=-len(sub_text),
+                        display=name,
+                        display_meta=f"{da.model} ({da.provider})",
+                    )
+            # Built-in catalog aliases not already covered
+            for name in sorted(MODEL_ALIASES.keys()):
+                if name in seen:
+                    continue
+                if name.startswith(sub_lower) and name != sub_lower:
+                    identity = MODEL_ALIASES[name]
+                    yield Completion(
+                        name,
+                        start_position=-len(sub_text),
+                        display=name,
+                        display_meta=f"{identity.vendor}/{identity.family}",
+                    )
+        except Exception:
+            pass
+
     def get_completions(self, document, complete_event):
         text = document.text_before_cursor
         if not text.startswith("/"):
@@ -875,8 +952,13 @@ class SlashCommandCompleter(Completer):
             sub_text = parts[1] if len(parts) > 1 else ""
             sub_lower = sub_text.lower()
 
+            # Dynamic model alias completions for /model
+            if " " not in sub_text and base_cmd == "/model":
+                yield from self._model_completions(sub_text, sub_lower)
+                return
+
             # Static subcommand completions
-            if " " not in sub_text and base_cmd in SUBCOMMANDS:
+            if " " not in sub_text and base_cmd in SUBCOMMANDS and self._command_allowed(base_cmd):
                 for sub in SUBCOMMANDS[base_cmd]:
                     if sub.startswith(sub_lower) and sub != sub_lower:
                         yield Completion(
@@ -889,6 +971,8 @@ class SlashCommandCompleter(Completer):
         word = text[1:]
 
         for cmd, desc in COMMANDS.items():
+            if not self._command_allowed(cmd):
+                continue
             cmd_name = cmd[1:]
             if cmd_name.startswith(word):
                 yield Completion(
@@ -948,6 +1032,8 @@ class SlashCommandAutoSuggest(AutoSuggest):
             # Still typing the command name: /upd → suggest "ate"
             word = text[1:].lower()
             for cmd in COMMANDS:
+                if self._completer is not None and not self._completer._command_allowed(cmd):
+                    continue
                 cmd_name = cmd[1:]  # strip leading /
                 if cmd_name.startswith(word) and cmd_name != word:
                     return Suggestion(cmd_name[len(word) :])
@@ -958,6 +1044,8 @@ class SlashCommandAutoSuggest(AutoSuggest):
         sub_lower = sub_text.lower()
 
         # Static subcommands
+        if self._completer is not None and not self._completer._command_allowed(base_cmd):
+            return None
         if base_cmd in SUBCOMMANDS and SUBCOMMANDS[base_cmd]:
             if " " not in sub_text:
                 for sub in SUBCOMMANDS[base_cmd]:

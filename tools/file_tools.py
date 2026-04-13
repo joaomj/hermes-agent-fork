@@ -7,6 +7,7 @@ import logging
 import os
 import threading
 from pathlib import Path
+from tools.binary_extensions import has_binary_extension
 from tools.file_operations import ShellFileOperations
 from agent.redact import redact_sensitive_text
 
@@ -308,9 +309,21 @@ def read_file_tool(
                 }
             )
 
+        _resolved = Path(path).expanduser().resolve()
+
+        # ── Binary file guard ─────────────────────────────────────────
+        # Block binary files by extension (no I/O).
+        if has_binary_extension(str(_resolved)):
+            _ext = _resolved.suffix.lower()
+            return json.dumps({
+                "error": (
+                    f"Cannot read binary file '{path}' ({_ext}). "
+                    "Use vision_analyze for images, or terminal to inspect binary files."
+                ),
+            })
+
         # ── Hermes internal path guard ────────────────────────────────
         # Prevent prompt injection via catalog or hub metadata files.
-        import pathlib as _pathlib
         from hermes_constants import get_hermes_home as _get_hh
 
         _resolved = _pathlib.Path(path).expanduser().resolve()
@@ -374,8 +387,6 @@ def read_file_tool(
         # ── Perform the read ──────────────────────────────────────────
         file_ops = _get_file_ops(task_id)
         result = file_ops.read_file(path, offset, limit)
-        if result.content:
-            result.content = redact_sensitive_text(result.content)
         result_dict = result.to_dict()
 
         # ── Character-count guard ─────────────────────────────────────
@@ -384,6 +395,7 @@ def read_file_tool(
         # amount of content, reject it and tell the model to narrow down.
         # Note: we check the formatted content (with line-number prefixes),
         # not the raw file size, because that's what actually enters context.
+        # Check BEFORE redaction to avoid expensive regex on huge content.
         content_len = len(result.content or "")
         file_size = result_dict.get("file_size", 0)
         max_chars = _get_max_read_chars()
@@ -403,6 +415,11 @@ def read_file_tool(
                 },
                 ensure_ascii=False,
             )
+
+        # ── Redact secrets (after guard check to skip oversized content) ──
+        if result.content:
+            result.content = redact_sensitive_text(result.content)
+            result_dict["content"] = result.content
 
         # Large-file hint: if the file is big and the caller didn't ask
         # for a narrow window, nudge toward targeted reads.
@@ -469,7 +486,7 @@ def read_file_tool(
 
         return json.dumps(result_dict, ensure_ascii=False)
     except Exception as e:
-        return json.dumps({"error": str(e)}, ensure_ascii=False)
+        return tool_error(str(e))
 
 
 def get_read_files_summary(task_id: str = "default") -> list:
@@ -596,7 +613,7 @@ def write_file_tool(path: str, content: str, task_id: str = "default") -> str:
     """Write content to a file."""
     sensitive_err = _check_sensitive_path(path)
     if sensitive_err:
-        return json.dumps({"error": sensitive_err}, ensure_ascii=False)
+        return tool_error(sensitive_err)
     try:
         stale_warning = _check_file_staleness(path, task_id)
         file_ops = _get_file_ops(task_id)
@@ -613,7 +630,7 @@ def write_file_tool(path: str, content: str, task_id: str = "default") -> str:
             logger.debug("write_file expected denial: %s: %s", type(e).__name__, e)
         else:
             logger.error("write_file error: %s: %s", type(e).__name__, e, exc_info=True)
-        return json.dumps({"error": str(e)}, ensure_ascii=False)
+        return tool_error(str(e))
 
 
 def patch_tool(
@@ -640,7 +657,7 @@ def patch_tool(
     for _p in _paths_to_check:
         sensitive_err = _check_sensitive_path(_p)
         if sensitive_err:
-            return json.dumps({"error": sensitive_err}, ensure_ascii=False)
+            return tool_error(sensitive_err)
     try:
         # Check staleness for all files this patch will touch.
         stale_warnings = []
@@ -653,13 +670,13 @@ def patch_tool(
 
         if mode == "replace":
             if not path:
-                return json.dumps({"error": "path required"})
+                return tool_error("path required")
             if old_string is None or new_string is None:
-                return json.dumps({"error": "old_string and new_string required"})
+                return tool_error("old_string and new_string required")
             result = file_ops.patch_replace(path, old_string, new_string, replace_all)
         elif mode == "patch":
             if not patch:
-                return json.dumps({"error": "patch content required"})
+                return tool_error("patch content required")
             result = file_ops.patch_v4a(patch)
         else:
             return json.dumps({"error": f"Unknown mode: {mode}"})
@@ -683,7 +700,7 @@ def patch_tool(
             result_json += "\n\n[Hint: old_string not found. Use read_file to verify the current content, or search_files to locate the text.]"
         return result_json
     except Exception as e:
-        return json.dumps({"error": str(e)}, ensure_ascii=False)
+        return tool_error(str(e))
 
 
 def search_tool(
@@ -772,7 +789,7 @@ def search_tool(
             result_json += f"\n\n[Hint: Results truncated. Use offset={next_offset} to see more, or narrow with a more specific pattern or file_glob.]"
         return result_json
     except Exception as e:
-        return json.dumps({"error": str(e)}, ensure_ascii=False)
+        return tool_error(str(e))
 
 
 FILE_TOOLS = [
@@ -783,15 +800,10 @@ FILE_TOOLS = [
 ]
 
 
-def get_file_tools():
-    """Get the list of file tool definitions."""
-    return FILE_TOOLS
-
-
 # ---------------------------------------------------------------------------
 # Schemas + Registry
 # ---------------------------------------------------------------------------
-from tools.registry import registry
+from tools.registry import registry, tool_error
 
 
 def _check_file_reqs():

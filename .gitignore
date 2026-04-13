@@ -56,3 +56,4 @@ cli-config.yaml
 # Nix
 .direnv/
 result
+website/static/api/skills-index.json

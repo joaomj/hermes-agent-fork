@@ -12,6 +12,8 @@ import os
 import sys
 from pathlib import Path
 
+from hermes_constants import get_hermes_home
+
 
 # ---------------------------------------------------------------------------
 # Curses-based interactive picker (same pattern as hermes tools)
@@ -179,6 +181,15 @@ def _install_dependencies(provider_name: str) -> None:
         return
 
     print(f"\n  Installing dependencies: {', '.join(missing)}")
+
+    import shutil
+    uv_path = shutil.which("uv")
+    if not uv_path:
+        print(f"  ⚠ uv not found — cannot install dependencies")
+        print(f"  Install uv: curl -LsSf https://astral.sh/uv/install.sh | sh")
+        print(f"  Then re-run: hermes memory setup")
+        return
+
     try:
         subprocess.run(
             [sys.executable, "-m", "pip", "install", "--quiet"] + missing,
@@ -192,10 +203,10 @@ def _install_dependencies(provider_name: str) -> None:
         stderr = (e.stderr or b"").decode()[:200]
         if stderr:
             print(f"    {stderr}")
-        print(f"  Run manually: pip install {' '.join(missing)}")
+        print(f"  Run manually: uv pip install --python {sys.executable} {' '.join(missing)}")
     except Exception as e:
         print(f"  ⚠ Install failed: {e}")
-        print(f"  Run manually: pip install {' '.join(missing)}")
+        print(f"  Run manually: uv pip install --python {sys.executable} {' '.join(missing)}")
 
     # Also show external dependencies (non-pip) if any
     ext_deps = meta.get("external_dependencies", [])
@@ -239,12 +250,16 @@ def _get_available_providers() -> list:
             else []
         )
         has_secrets = any(f.get("secret") for f in schema)
-        if has_secrets:
+        has_non_secrets = any(not f.get("secret") for f in schema)
+        if has_secrets and has_non_secrets:
+            setup_hint = "API key / local"
+        elif has_secrets:
             setup_hint = "requires API key"
         elif not schema:
             setup_hint = "no setup needed"
         else:
             setup_hint = "local"
+
         results.append((name, setup_hint, provider))
     return results
 
@@ -295,7 +310,6 @@ def cmd_setup(args) -> None:
         provider.get_config_schema() if hasattr(provider, "get_config_schema") else []
     )
 
-    # Provider config section
     provider_config = config["memory"].get(name, {})
     if not isinstance(provider_config, dict):
         provider_config = {}
@@ -312,10 +326,24 @@ def cmd_setup(args) -> None:
             key = field["key"]
             desc = field.get("description", key)
             default = field.get("default")
+            # Dynamic default: look up default from another field's value
+            default_from = field.get("default_from")
+            if default_from and isinstance(default_from, dict):
+                ref_field = default_from.get("field", "")
+                ref_map = default_from.get("map", {})
+                ref_value = provider_config.get(ref_field, "")
+                if ref_value and ref_value in ref_map:
+                    default = ref_map[ref_value]
             is_secret = field.get("secret", False)
             choices = field.get("choices")
             env_var = field.get("env_var")
             url = field.get("url")
+
+            # Skip fields whose "when" condition doesn't match
+            when = field.get("when")
+            if when and isinstance(when, dict):
+                if not all(provider_config.get(k) == v for k, v in when.items()):
+                    continue
 
             if choices and not is_secret:
                 # Use curses picker for choice fields
@@ -363,18 +391,18 @@ def cmd_setup(args) -> None:
         try:
             provider.save_config(provider_config, hermes_home)
         except Exception as e:
-            print(f"  ⚠ Failed to write provider config: {e}")
+            print(f"  Failed to write provider config: {e}")
 
     # Write secrets to .env
     if env_writes:
         _write_env_vars(env_path, env_writes)
 
-    print(f"\n  ✓ Memory provider: {name}")
-    print(f"  ✓ Activation saved to config.yaml")
+    print(f"\n  Memory provider: {name}")
+    print(f"  Activation saved to config.yaml")
     if provider_config:
-        print(f"  ✓ Provider config saved")
+        print(f"  Provider config saved")
     if env_writes:
-        print(f"  ✓ API keys saved to .env")
+        print(f"  API keys saved to .env")
     print(f"\n  Start a new session to activate.\n")
 
 

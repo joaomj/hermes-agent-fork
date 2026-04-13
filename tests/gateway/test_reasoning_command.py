@@ -93,7 +93,6 @@ class TestReasoningCommand:
         )
 
         monkeypatch.setattr(gateway_run, "_hermes_home", hermes_home)
-        monkeypatch.delenv("HERMES_REASONING_EFFORT", raising=False)
 
         runner = _make_runner()
         runner._reasoning_config = {"enabled": True, "effort": "xhigh"}
@@ -116,7 +115,6 @@ class TestReasoningCommand:
         config_path.write_text("agent:\n  reasoning_effort: medium\n", encoding="utf-8")
 
         monkeypatch.setattr(gateway_run, "_hermes_home", hermes_home)
-        monkeypatch.delenv("HERMES_REASONING_EFFORT", raising=False)
 
         runner = _make_runner()
         runner._reasoning_config = {"enabled": True, "effort": "medium"}
@@ -150,7 +148,6 @@ class TestReasoningCommand:
                 "api_key": "test-key",
             },
         )
-        monkeypatch.delenv("HERMES_REASONING_EFFORT", raising=False)
         fake_run_agent = types.ModuleType("run_agent")
         fake_run_agent.AIAgent = _CapturingAgent
         monkeypatch.setitem(sys.modules, "run_agent", fake_run_agent)

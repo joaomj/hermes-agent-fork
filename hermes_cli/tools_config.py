@@ -255,7 +255,7 @@ TOOL_CATEGORIES = {
                 "tag": "Free headless Chromium (no API key needed)",
                 "env_vars": [],
                 "browser_provider": "local",
-                "post_setup": "browserbase",  # Same npm install for agent-browser
+                "post_setup": "agent_browser",
             },
             {
                 "name": "Browserbase",
@@ -272,7 +272,7 @@ TOOL_CATEGORIES = {
                     },
                 ],
                 "browser_provider": "browserbase",
-                "post_setup": "browserbase",
+                "post_setup": "agent_browser",
             },
             {
                 "name": "Browser Use",
@@ -285,7 +285,16 @@ TOOL_CATEGORIES = {
                     },
                 ],
                 "browser_provider": "browser-use",
-                "post_setup": "browserbase",
+                "post_setup": "agent_browser",
+            },
+            {
+                "name": "Firecrawl",
+                "tag": "Cloud browser with remote execution",
+                "env_vars": [
+                    {"key": "FIRECRAWL_API_KEY", "prompt": "Firecrawl API key", "url": "https://firecrawl.dev"},
+                ],
+                "browser_provider": "firecrawl",
+                "post_setup": "agent_browser",
             },
         ],
     },
@@ -414,6 +423,10 @@ def _get_platform_tools(
         default_ts = PLATFORMS[platform]["default_toolset"]
         toolset_names = [default_ts]
 
+    # YAML may parse bare numeric names (e.g. ``12306:``) as int.
+    # Normalise to str so downstream sorted() never mixes types.
+    toolset_names = [str(ts) for ts in toolset_names]
+
     configurable_keys = {ts_key for ts_key, _, _ in CONFIGURABLE_TOOLSETS}
 
     # If the saved list contains any configurable keys directly, the user
@@ -469,17 +482,23 @@ def _get_platform_tools(
     # MCP servers are expected to be available on all platforms by default.
     # If the platform explicitly lists one or more MCP server names, treat that
     # as an allowlist. Otherwise include every globally enabled MCP server.
+    # Special sentinel: "no_mcp" in the toolset list disables all MCP servers.
     mcp_servers = config.get("mcp_servers") or {}
     enabled_mcp_servers = {
-        name
+        str(name)
         for name, server_cfg in mcp_servers.items()
         if isinstance(server_cfg, dict)
         and _parse_enabled_flag(server_cfg.get("enabled", True), default=True)
     }
-    explicit_mcp_servers = explicit_passthrough & enabled_mcp_servers
-    enabled_toolsets.update(explicit_passthrough - enabled_mcp_servers)
+    # Allow "no_mcp" sentinel to opt out of all MCP servers for this platform
+    if "no_mcp" in toolset_names:
+        explicit_mcp_servers = set()
+        enabled_toolsets.update(explicit_passthrough - enabled_mcp_servers - {"no_mcp"})
+    else:
+        explicit_mcp_servers = explicit_passthrough & enabled_mcp_servers
+        enabled_toolsets.update(explicit_passthrough - enabled_mcp_servers)
     if include_default_mcp_servers:
-        if explicit_mcp_servers:
+        if explicit_mcp_servers or "no_mcp" in toolset_names:
             enabled_toolsets.update(explicit_mcp_servers)
         else:
             enabled_toolsets.update(enabled_mcp_servers)

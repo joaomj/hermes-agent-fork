@@ -1,15 +1,23 @@
-"""Regression tests for Google Workspace API credential validation."""
+"""Tests for Google Workspace gws bridge and CLI wrapper."""
 
 import importlib.util
 import json
+import os
+import subprocess
 import sys
 import types
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 
-SCRIPT_PATH = (
+BRIDGE_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "skills/productivity/google-workspace/scripts/gws_bridge.py"
+)
+API_PATH = (
     Path(__file__).resolve().parents[2]
     / "_skills-available/productivity/google-workspace/scripts/google_api.py"
 )
@@ -58,15 +66,10 @@ class FakeCredentialsFactory:
 
 
 @pytest.fixture
-def google_api_module(monkeypatch, tmp_path):
-    google_module = types.ModuleType("google")
-    oauth2_module = types.ModuleType("google.oauth2")
-    credentials_module = types.ModuleType("google.oauth2.credentials")
-    credentials_module.Credentials = FakeCredentialsFactory
-    auth_module = types.ModuleType("google.auth")
-    transport_module = types.ModuleType("google.auth.transport")
-    requests_module = types.ModuleType("google.auth.transport.requests")
-    requests_module.Request = object
+def bridge_module(monkeypatch, tmp_path):
+    hermes_home = tmp_path / ".hermes"
+    hermes_home.mkdir()
+    monkeypatch.setenv("HERMES_HOME", str(hermes_home))
 
     monkeypatch.setitem(sys.modules, "google", google_module)
     monkeypatch.setitem(sys.modules, "google.oauth2", oauth2_module)
@@ -81,8 +84,6 @@ def google_api_module(monkeypatch, tmp_path):
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
     spec.loader.exec_module(module)
-
-    monkeypatch.setattr(module, "TOKEN_PATH", tmp_path / "google_token.json")
     return module
 
 
@@ -111,18 +112,107 @@ def test_get_credentials_rejects_missing_scopes(google_api_module, capsys):
         ],
     )
 
+    result = bridge_module.get_valid_token()
+    assert result == "ya29.valid"
+
+
+def test_bridge_refreshes_expired_token(bridge_module, tmp_path):
+    """Expired token triggers a refresh via token_uri."""
+    past = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+    token_path = bridge_module.get_token_path()
+    _write_token(token_path, token="ya29.old", expiry=past)
+
+    mock_resp = MagicMock()
+    mock_resp.read.return_value = json.dumps({
+        "access_token": "ya29.refreshed",
+        "expires_in": 3600,
+    }).encode()
+    mock_resp.__enter__ = lambda s: s
+    mock_resp.__exit__ = MagicMock(return_value=False)
+
+    with patch("urllib.request.urlopen", return_value=mock_resp):
+        result = bridge_module.get_valid_token()
+
+    assert result == "ya29.refreshed"
+    # Verify persisted
+    saved = json.loads(token_path.read_text())
+    assert saved["token"] == "ya29.refreshed"
+
+
+def test_bridge_exits_on_missing_token(bridge_module):
+    """Missing token file causes exit with code 1."""
     with pytest.raises(SystemExit):
-        google_api_module.get_credentials()
-
-    err = capsys.readouterr().err
-    assert "missing google workspace scopes" in err.lower()
-    assert "gmail.send" in err
+        bridge_module.get_valid_token()
 
 
-def test_get_credentials_accepts_full_scope_token(google_api_module):
-    FakeCredentialsFactory.creds = FakeAuthorizedCredentials(valid=True)
-    _write_token(google_api_module.TOKEN_PATH, list(google_api_module.SCOPES))
+def test_bridge_main_injects_token_env(bridge_module, tmp_path):
+    """main() sets GOOGLE_WORKSPACE_CLI_TOKEN in subprocess env."""
+    future = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+    token_path = bridge_module.get_token_path()
+    _write_token(token_path, token="ya29.injected", expiry=future)
 
-    creds = google_api_module.get_credentials()
+    captured = {}
 
-    assert creds is FakeCredentialsFactory.creds
+    def capture_run(cmd, **kwargs):
+        captured["cmd"] = cmd
+        captured["env"] = kwargs.get("env", {})
+        return MagicMock(returncode=0)
+
+    with patch.object(sys, "argv", ["gws_bridge.py", "gmail", "+triage"]):
+        with patch.object(subprocess, "run", side_effect=capture_run):
+            with pytest.raises(SystemExit):
+                bridge_module.main()
+
+    assert captured["env"]["GOOGLE_WORKSPACE_CLI_TOKEN"] == "ya29.injected"
+    assert captured["cmd"] == ["gws", "gmail", "+triage"]
+
+
+def test_api_calendar_list_uses_agenda_by_default(api_module):
+    """calendar list without dates uses +agenda helper."""
+    captured = {}
+
+    def capture_run(cmd, **kwargs):
+        captured["cmd"] = cmd
+        return MagicMock(returncode=0)
+
+    args = api_module.argparse.Namespace(
+        start="", end="", max=25, calendar="primary", func=api_module.calendar_list,
+    )
+
+    with patch.object(subprocess, "run", side_effect=capture_run):
+        with pytest.raises(SystemExit):
+            api_module.calendar_list(args)
+
+    gws_args = captured["cmd"][2:]  # skip python + bridge path
+    assert "calendar" in gws_args
+    assert "+agenda" in gws_args
+    assert "--days" in gws_args
+
+
+def test_api_calendar_list_respects_date_range(api_module):
+    """calendar list with --start/--end uses raw events list API."""
+    captured = {}
+
+    def capture_run(cmd, **kwargs):
+        captured["cmd"] = cmd
+        return MagicMock(returncode=0)
+
+    args = api_module.argparse.Namespace(
+        start="2026-04-01T00:00:00Z",
+        end="2026-04-07T23:59:59Z",
+        max=25,
+        calendar="primary",
+        func=api_module.calendar_list,
+    )
+
+    with patch.object(subprocess, "run", side_effect=capture_run):
+        with pytest.raises(SystemExit):
+            api_module.calendar_list(args)
+
+    gws_args = captured["cmd"][2:]
+    assert "events" in gws_args
+    assert "list" in gws_args
+    params_idx = gws_args.index("--params")
+    params = json.loads(gws_args[params_idx + 1])
+    assert params["timeMin"] == "2026-04-01T00:00:00Z"
+    assert params["timeMax"] == "2026-04-07T23:59:59Z"
