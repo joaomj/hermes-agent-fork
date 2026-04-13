@@ -32,7 +32,9 @@ def store(tmp_path):
     return s
 
 
-def _dm_source(platform=Platform.SLACK, chat_id="D123", thread_id=None, user_id="U1"):
+def _dm_source(
+    platform=Platform.TELEGRAM, chat_id="D123", thread_id=None, user_id="U1"
+):
     return SessionSource(
         platform=platform,
         chat_id=chat_id,
@@ -42,7 +44,9 @@ def _dm_source(platform=Platform.SLACK, chat_id="D123", thread_id=None, user_id=
     )
 
 
-def _group_source(platform=Platform.SLACK, chat_id="C456", thread_id=None, user_id="U1"):
+def _group_source(
+    platform=Platform.TELEGRAM, chat_id="C456", thread_id=None, user_id="U1"
+):
     return SessionSource(
         platform=platform,
         chat_id=chat_id,
@@ -83,9 +87,9 @@ class TestDMThreadIsolation:
 
         thread_source = _dm_source(thread_id="1234567890.000001")
         thread_entry = store.get_or_create_session(thread_source)
-        store.append_to_transcript(thread_entry.session_id, {
-            "role": "user", "content": "thread-only message"
-        })
+        store.append_to_transcript(
+            thread_entry.session_id, {"role": "user", "content": "thread-only message"}
+        )
 
         parent_transcript = store.load_transcript(parent_entry.session_id)
         assert len(parent_transcript) == 2
@@ -101,9 +105,9 @@ class TestDMThreadIsolation:
         # Thread A
         thread_a_source = _dm_source(thread_id="1111.000001")
         thread_a_entry = store.get_or_create_session(thread_a_source)
-        store.append_to_transcript(thread_a_entry.session_id, {
-            "role": "user", "content": "thread A message"
-        })
+        store.append_to_transcript(
+            thread_a_entry.session_id, {"role": "user", "content": "thread A message"}
+        )
 
         # Thread B
         thread_b_source = _dm_source(thread_id="2222.000002")
@@ -127,11 +131,16 @@ class TestDMThreadIsolation:
 
         thread_source = _dm_source(thread_id="1234567890.000001")
         thread_entry = store.get_or_create_session(thread_source)
-        store.append_to_transcript(thread_entry.session_id, {
-            "role": "user", "content": "follow-up"
-        })
+        store.append_to_transcript(
+            thread_entry.session_id, {"role": "user", "content": "follow-up"}
+        )
 
-        # Get the same thread session again
+        # Add more to parent after thread was created
+        store.append_to_transcript(
+            parent_entry.session_id, {"role": "user", "content": "new parent message"}
+        )
+
+        # Get the same thread session again (not new — created_at != updated_at)
         thread_entry_again = store.get_or_create_session(thread_source)
         assert thread_entry_again.session_id == thread_entry.session_id
 
@@ -177,9 +186,9 @@ class TestDMThreadIsolationEdgeCases:
 class TestDMThreadIsolationCrossPlatform:
     """Verify thread isolation is consistent across all platforms."""
 
-    @pytest.mark.parametrize("platform", [Platform.SLACK, Platform.TELEGRAM, Platform.DISCORD])
-    def test_thread_starts_empty_across_platforms(self, store, platform):
-        """DM thread sessions start empty regardless of platform."""
+    @pytest.mark.parametrize("platform", [Platform.TELEGRAM])
+    def test_seeding_works_across_platforms(self, store, platform):
+        """DM thread seeding should work for any platform that uses thread_id."""
         parent_source = _dm_source(platform=platform)
         parent_entry = store.get_or_create_session(parent_source)
         for msg in PARENT_HISTORY:

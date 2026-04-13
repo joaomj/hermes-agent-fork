@@ -19,8 +19,50 @@ BRIDGE_PATH = (
 )
 API_PATH = (
     Path(__file__).resolve().parents[2]
-    / "skills/productivity/google-workspace/scripts/google_api.py"
+    / "_skills-available/productivity/google-workspace/scripts/google_api.py"
 )
+
+
+class FakeAuthorizedCredentials:
+    def __init__(self, *, valid=True, expired=False, refresh_token="refresh-token"):
+        self.valid = valid
+        self.expired = expired
+        self.refresh_token = refresh_token
+        self.refresh_calls = 0
+
+    def refresh(self, _request):
+        self.refresh_calls += 1
+        self.valid = True
+        self.expired = False
+
+    def to_json(self):
+        return json.dumps(
+            {
+                "token": "refreshed-token",
+                "refresh_token": self.refresh_token,
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "client_id": "client-id",
+                "client_secret": "client-secret",
+                "scopes": [
+                    "https://www.googleapis.com/auth/gmail.readonly",
+                    "https://www.googleapis.com/auth/gmail.send",
+                    "https://www.googleapis.com/auth/gmail.modify",
+                    "https://www.googleapis.com/auth/calendar",
+                    "https://www.googleapis.com/auth/drive.readonly",
+                    "https://www.googleapis.com/auth/contacts.readonly",
+                    "https://www.googleapis.com/auth/spreadsheets",
+                    "https://www.googleapis.com/auth/documents.readonly",
+                ],
+            }
+        )
+
+
+class FakeCredentialsFactory:
+    creds = FakeAuthorizedCredentials()
+
+    @classmethod
+    def from_authorized_user_file(cls, _path, _scopes):
+        return cls.creds
 
 
 @pytest.fixture
@@ -29,45 +71,46 @@ def bridge_module(monkeypatch, tmp_path):
     hermes_home.mkdir()
     monkeypatch.setenv("HERMES_HOME", str(hermes_home))
 
-    spec = importlib.util.spec_from_file_location("gws_bridge_test", BRIDGE_PATH)
+    monkeypatch.setitem(sys.modules, "google", google_module)
+    monkeypatch.setitem(sys.modules, "google.oauth2", oauth2_module)
+    monkeypatch.setitem(sys.modules, "google.oauth2.credentials", credentials_module)
+    monkeypatch.setitem(sys.modules, "google.auth", auth_module)
+    monkeypatch.setitem(sys.modules, "google.auth.transport", transport_module)
+    monkeypatch.setitem(sys.modules, "google.auth.transport.requests", requests_module)
+
+    spec = importlib.util.spec_from_file_location(
+        "google_workspace_api_test", SCRIPT_PATH
+    )
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
     spec.loader.exec_module(module)
     return module
 
 
-@pytest.fixture
-def api_module(monkeypatch, tmp_path):
-    hermes_home = tmp_path / ".hermes"
-    hermes_home.mkdir()
-    monkeypatch.setenv("HERMES_HOME", str(hermes_home))
-
-    spec = importlib.util.spec_from_file_location("gws_api_test", API_PATH)
-    module = importlib.util.module_from_spec(spec)
-    assert spec.loader is not None
-    spec.loader.exec_module(module)
-    return module
-
-
-def _write_token(path: Path, *, token="ya29.test", expiry=None, **extra):
-    data = {
-        "token": token,
-        "refresh_token": "1//refresh",
-        "client_id": "123.apps.googleusercontent.com",
-        "client_secret": "secret",
-        "token_uri": "https://oauth2.googleapis.com/token",
-        **extra,
-    }
-    if expiry is not None:
-        data["expiry"] = expiry
-    path.write_text(json.dumps(data))
+def _write_token(path: Path, scopes):
+    path.write_text(
+        json.dumps(
+            {
+                "token": "access-token",
+                "refresh_token": "refresh-token",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "client_id": "client-id",
+                "client_secret": "client-secret",
+                "scopes": scopes,
+            }
+        )
+    )
 
 
-def test_bridge_returns_valid_token(bridge_module, tmp_path):
-    """Non-expired token is returned without refresh."""
-    future = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
-    token_path = bridge_module.get_token_path()
-    _write_token(token_path, token="ya29.valid", expiry=future)
+def test_get_credentials_rejects_missing_scopes(google_api_module, capsys):
+    FakeCredentialsFactory.creds = FakeAuthorizedCredentials(valid=True)
+    _write_token(
+        google_api_module.TOKEN_PATH,
+        [
+            "https://www.googleapis.com/auth/drive.readonly",
+            "https://www.googleapis.com/auth/spreadsheets",
+        ],
+    )
 
     result = bridge_module.get_valid_token()
     assert result == "ya29.valid"

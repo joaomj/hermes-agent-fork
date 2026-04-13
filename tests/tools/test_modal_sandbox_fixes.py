@@ -21,14 +21,18 @@ if str(_repo_root) not in sys.path:
 
 try:
     import tools.terminal_tool  # noqa: F401
+
     _tt_mod = sys.modules["tools.terminal_tool"]
 except ImportError:
-    pytest.skip("hermes-agent tools not importable (missing deps)", allow_module_level=True)
+    pytest.skip(
+        "hermes-agent tools not importable (missing deps)", allow_module_level=True
+    )
 
 
 # =========================================================================
 # Test 1: Tool resolution includes terminal + file tools
 # =========================================================================
+
 
 class TestToolResolution:
     """Verify get_tool_definitions returns all expected tools for eval."""
@@ -36,17 +40,26 @@ class TestToolResolution:
     def test_terminal_and_file_toolsets_resolve_all_tools(self):
         """enabled_toolsets=['terminal', 'file'] should produce 6 tools."""
         from model_tools import get_tool_definitions
+
         tools = get_tool_definitions(
             enabled_toolsets=["terminal", "file"],
             quiet_mode=True,
         )
         names = {t["function"]["name"] for t in tools}
-        expected = {"terminal", "process", "read_file", "write_file", "search_files", "patch"}
+        expected = {
+            "terminal",
+            "process",
+            "read_file",
+            "write_file",
+            "search_files",
+            "patch",
+        }
         assert expected == names, f"Expected {expected}, got {names}"
 
     def test_terminal_tool_present(self):
         """The terminal tool must be present (not silently dropped)."""
         from model_tools import get_tool_definitions
+
         tools = get_tool_definitions(
             enabled_toolsets=["terminal", "file"],
             quiet_mode=True,
@@ -59,68 +72,101 @@ class TestToolResolution:
 # Test 2-4: CWD handling for container backends
 # =========================================================================
 
+
 class TestCwdHandling:
     """Verify host paths are sanitized for container backends."""
 
     def test_home_path_replaced_for_modal(self, monkeypatch):
         """TERMINAL_CWD=/home/user/... should be replaced with /root for modal."""
-        monkeypatch.setenv("TERMINAL_ENV", "modal")
-        monkeypatch.setenv("TERMINAL_CWD", "/home/dakota/github/hermes-agent")
-        config = _tt_mod._get_env_config()
-        assert config["cwd"] == "/root", (
-            f"Expected /root, got {config['cwd']}. "
-            "/home/ paths should be replaced for modal backend."
-        )
+        with patch.dict(
+            os.environ,
+            {
+                "TERMINAL_ENV": "modal",
+                "TERMINAL_CWD": "/home/dakota/github/hermes-agent",
+            },
+        ):
+            config = _tt_mod._get_env_config()
+            assert config["cwd"] == "/root", (
+                f"Expected /root, got {config['cwd']}. "
+                "/home/ paths should be replaced for modal backend."
+            )
 
     def test_users_path_replaced_for_docker_by_default(self, monkeypatch):
         """Docker should keep host paths out of the sandbox unless explicitly enabled."""
-        monkeypatch.setenv("TERMINAL_ENV", "docker")
-        monkeypatch.setenv("TERMINAL_CWD", "/Users/someone/projects")
-        config = _tt_mod._get_env_config()
-        assert config["cwd"] == "/root", (
-            f"Expected /root, got {config['cwd']}. "
-            "Host paths should be discarded for docker backend by default."
-        )
-        assert config["host_cwd"] is None
-        assert config["docker_mount_cwd_to_workspace"] is False
+        with patch.dict(
+            os.environ,
+            {
+                "TERMINAL_ENV": "docker",
+                "TERMINAL_CWD": "/Users/someone/projects",
+            },
+        ):
+            config = _tt_mod._get_env_config()
+            assert config["cwd"] == "/root", (
+                f"Expected /root, got {config['cwd']}. "
+                "Host paths should be discarded for docker backend by default."
+            )
+            assert config["host_cwd"] is None
+            assert config["docker_mount_cwd_to_workspace"] is False
 
     def test_users_path_maps_to_workspace_for_docker_when_enabled(self, monkeypatch):
         """Docker should map the host cwd into /workspace only when explicitly enabled."""
-        monkeypatch.setenv("TERMINAL_ENV", "docker")
-        monkeypatch.setenv("TERMINAL_CWD", "/Users/someone/projects")
-        monkeypatch.setenv("TERMINAL_DOCKER_MOUNT_CWD_TO_WORKSPACE", "true")
-        config = _tt_mod._get_env_config()
-        assert config["cwd"] == "/workspace"
-        assert config["host_cwd"] == "/Users/someone/projects"
-        assert config["docker_mount_cwd_to_workspace"] is True
+        with patch.dict(
+            os.environ,
+            {
+                "TERMINAL_ENV": "docker",
+                "TERMINAL_CWD": "/Users/someone/projects",
+                "TERMINAL_DOCKER_MOUNT_CWD_TO_WORKSPACE": "true",
+            },
+        ):
+            config = _tt_mod._get_env_config()
+            assert config["cwd"] == "/workspace"
+            assert config["host_cwd"] == "/Users/someone/projects"
+            assert config["docker_mount_cwd_to_workspace"] is True
 
     def test_windows_path_replaced_for_modal(self, monkeypatch):
         """TERMINAL_CWD=C:\\Users\\... should be replaced for modal."""
-        monkeypatch.setenv("TERMINAL_ENV", "modal")
-        monkeypatch.setenv("TERMINAL_CWD", "C:\\Users\\someone\\projects")
-        config = _tt_mod._get_env_config()
-        assert config["cwd"] == "/root"
+        with patch.dict(
+            os.environ,
+            {
+                "TERMINAL_ENV": "modal",
+                "TERMINAL_CWD": "C:\\Users\\someone\\projects",
+            },
+        ):
+            config = _tt_mod._get_env_config()
+            assert config["cwd"] == "/root"
 
     @pytest.mark.parametrize("backend", ["modal", "docker", "singularity", "daytona"])
     def test_default_cwd_is_root_for_container_backends(self, backend, monkeypatch):
         """Container backends should default to /root, not ~."""
-        monkeypatch.setenv("TERMINAL_ENV", backend)
-        monkeypatch.delenv("TERMINAL_CWD", raising=False)
-        monkeypatch.delenv("TERMINAL_DOCKER_MOUNT_CWD_TO_WORKSPACE", raising=False)
-        config = _tt_mod._get_env_config()
-        assert config["cwd"] == "/root", (
-            f"Backend {backend}: expected /root default, got {config['cwd']}"
-        )
+        for backend in ("modal", "docker"):
+            with patch.dict(os.environ, {"TERMINAL_ENV": backend}, clear=False):
+                # Remove TERMINAL_CWD so it uses default
+                env = os.environ.copy()
+                env.pop("TERMINAL_CWD", None)
+                env.pop("TERMINAL_DOCKER_MOUNT_CWD_TO_WORKSPACE", None)
+                with patch.dict(os.environ, env, clear=True):
+                    config = _tt_mod._get_env_config()
+                    assert config["cwd"] == "/root", (
+                        f"Backend {backend}: expected /root default, got {config['cwd']}"
+                    )
 
     def test_docker_default_cwd_maps_current_directory_when_enabled(self, monkeypatch):
         """Docker should use /workspace when cwd mounting is explicitly enabled."""
-        monkeypatch.setattr("tools.terminal_tool.os.getcwd", lambda: "/home/user/project")
-        monkeypatch.setenv("TERMINAL_ENV", "docker")
-        monkeypatch.setenv("TERMINAL_DOCKER_MOUNT_CWD_TO_WORKSPACE", "true")
-        monkeypatch.delenv("TERMINAL_CWD", raising=False)
-        config = _tt_mod._get_env_config()
-        assert config["cwd"] == "/workspace"
-        assert config["host_cwd"] == "/home/user/project"
+        with patch("tools.terminal_tool.os.getcwd", return_value="/home/user/project"):
+            with patch.dict(
+                os.environ,
+                {
+                    "TERMINAL_ENV": "docker",
+                    "TERMINAL_DOCKER_MOUNT_CWD_TO_WORKSPACE": "true",
+                },
+                clear=False,
+            ):
+                env = os.environ.copy()
+                env.pop("TERMINAL_CWD", None)
+                with patch.dict(os.environ, env, clear=True):
+                    config = _tt_mod._get_env_config()
+                    assert config["cwd"] == "/workspace"
+                    assert config["host_cwd"] == "/home/user/project"
 
     def test_local_backend_uses_getcwd(self, monkeypatch):
         """Local backend should use os.getcwd(), not /root."""
@@ -156,19 +202,25 @@ class TestCwdHandling:
 
     def test_ssh_preserves_home_paths(self, monkeypatch):
         """SSH backend should NOT replace /home/ paths (they're valid remotely)."""
-        monkeypatch.setenv("TERMINAL_ENV", "ssh")
-        monkeypatch.setenv("TERMINAL_CWD", "/home/remote-user/work")
-        monkeypatch.setenv("TERMINAL_SSH_HOST", "example.com")
-        monkeypatch.setenv("TERMINAL_SSH_USER", "user")
-        config = _tt_mod._get_env_config()
-        assert config["cwd"] == "/home/remote-user/work", (
-            "SSH backend should preserve /home/ paths"
-        )
+        with patch.dict(
+            os.environ,
+            {
+                "TERMINAL_ENV": "ssh",
+                "TERMINAL_CWD": "/home/remote-user/work",
+                "TERMINAL_SSH_HOST": "example.com",
+                "TERMINAL_SSH_USER": "user",
+            },
+        ):
+            config = _tt_mod._get_env_config()
+            assert config["cwd"] == "/home/remote-user/work", (
+                "SSH backend should preserve /home/ paths"
+            )
 
 
 # =========================================================================
 # Test 5: ephemeral_disk version check
 # =========================================================================
+
 
 class TestEphemeralDiskCheck:
     """Verify ephemeral_disk is only passed when modal supports it."""
@@ -176,6 +228,7 @@ class TestEphemeralDiskCheck:
     def test_ephemeral_disk_skipped_when_unsupported(self, monkeypatch):
         """If modal.Sandbox.create doesn't have ephemeral_disk param, skip it."""
         import inspect
+
         mock_params = {
             "args": inspect.Parameter("args", inspect.Parameter.VAR_POSITIONAL),
             "image": inspect.Parameter("image", inspect.Parameter.KEYWORD_ONLY),
@@ -208,6 +261,7 @@ class TestEphemeralDiskCheck:
 # Test 6: ModalEnvironment defaults
 # =========================================================================
 
+
 class TestModalEnvironmentDefaults:
     """Verify ModalEnvironment has correct defaults."""
 
@@ -215,6 +269,7 @@ class TestModalEnvironmentDefaults:
         """ModalEnvironment default cwd should be /root, not ~."""
         from tools.environments.modal import ModalEnvironment
         import inspect
+
         sig = inspect.signature(ModalEnvironment.__init__)
         cwd_default = sig.parameters["cwd"].default
         assert cwd_default == "/root", (
@@ -227,6 +282,7 @@ class TestModalEnvironmentDefaults:
 # Test 7: ensurepip fix in ModalEnvironment
 # =========================================================================
 
+
 class TestEnsurepipFix:
     """Verify the pip fix is applied in the ModalEnvironment init."""
 
@@ -238,7 +294,8 @@ class TestEnsurepipFix:
             pytest.skip("tools.environments.modal not importable")
 
         import inspect
-        source = inspect.getsource(_resolve_modal_image)
+
+        source = inspect.getsource(ModalEnvironment.__init__)
         assert "ensurepip" in source, (
             "_resolve_modal_image should include ensurepip fix "
             "for Modal's legacy image builder"
@@ -256,6 +313,7 @@ class TestEnsurepipFix:
             pytest.skip("tools.environments.modal not importable")
 
         import inspect
+
         source = inspect.getsource(ModalEnvironment)
         assert "swerex" not in source.lower(), (
             "ModalEnvironment should not depend on swe-rex; "
@@ -273,6 +331,7 @@ class TestEnsurepipFix:
 # Test 8: Host prefix list completeness
 # =========================================================================
 
+
 class TestHostPrefixList:
     """Verify the host prefix list catches common host-only paths."""
 
@@ -280,6 +339,7 @@ class TestHostPrefixList:
         """The host prefix check should catch /Users/, /home/, C:\\, C:/."""
         # Read the actual source to verify the prefixes
         import inspect
+
         source = inspect.getsource(_tt_mod._get_env_config)
         for prefix in ["/Users/", "/home/", 'C:\\\\"', "C:/"]:
             # Normalize for source comparison

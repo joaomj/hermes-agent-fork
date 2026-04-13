@@ -22,6 +22,7 @@ def _build_provider_env_blocklist() -> frozenset:
 
     try:
         from hermes_cli.auth import PROVIDER_REGISTRY
+
         for pconfig in PROVIDER_REGISTRY.values():
             blocked.update(pconfig.api_key_env_vars)
             if pconfig.base_url_env_var:
@@ -31,6 +32,7 @@ def _build_provider_env_blocklist() -> frozenset:
 
     try:
         from hermes_cli.config import OPTIONAL_ENV_VARS
+
         for name, metadata in OPTIONAL_ENV_VARS.items():
             category = metadata.get("category")
             if category in {"tool", "messaging"}:
@@ -40,75 +42,95 @@ def _build_provider_env_blocklist() -> frozenset:
     except ImportError:
         pass
 
-    blocked.update({
-        "OPENAI_BASE_URL",
-        "OPENAI_API_KEY",
-        "OPENAI_API_BASE",
-        "OPENAI_ORG_ID",
-        "OPENAI_ORGANIZATION",
-        "OPENROUTER_API_KEY",
-        "ANTHROPIC_BASE_URL",
-        "ANTHROPIC_TOKEN",
-        "CLAUDE_CODE_OAUTH_TOKEN",
-        "LLM_MODEL",
-        "GOOGLE_API_KEY",
-        "DEEPSEEK_API_KEY",
-        "MISTRAL_API_KEY",
-        "GROQ_API_KEY",
-        "TOGETHER_API_KEY",
-        "PERPLEXITY_API_KEY",
-        "COHERE_API_KEY",
-        "FIREWORKS_API_KEY",
-        "XAI_API_KEY",
-        "HELICONE_API_KEY",
-        "PARALLEL_API_KEY",
-        "FIRECRAWL_API_KEY",
-        "FIRECRAWL_API_URL",
-        "TELEGRAM_HOME_CHANNEL",
-        "TELEGRAM_HOME_CHANNEL_NAME",
-        "DISCORD_HOME_CHANNEL",
-        "DISCORD_HOME_CHANNEL_NAME",
-        "DISCORD_REQUIRE_MENTION",
-        "DISCORD_FREE_RESPONSE_CHANNELS",
-        "DISCORD_AUTO_THREAD",
-        "SLACK_HOME_CHANNEL",
-        "SLACK_HOME_CHANNEL_NAME",
-        "SLACK_ALLOWED_USERS",
-        "WHATSAPP_ENABLED",
-        "WHATSAPP_MODE",
-        "WHATSAPP_ALLOWED_USERS",
-        "SIGNAL_HTTP_URL",
-        "SIGNAL_ACCOUNT",
-        "SIGNAL_ALLOWED_USERS",
-        "SIGNAL_GROUP_ALLOWED_USERS",
-        "SIGNAL_HOME_CHANNEL",
-        "SIGNAL_HOME_CHANNEL_NAME",
-        "SIGNAL_IGNORE_STORIES",
-        "HASS_TOKEN",
-        "HASS_URL",
-        "EMAIL_ADDRESS",
-        "EMAIL_PASSWORD",
-        "EMAIL_IMAP_HOST",
-        "EMAIL_SMTP_HOST",
-        "EMAIL_HOME_ADDRESS",
-        "EMAIL_HOME_ADDRESS_NAME",
-        "GATEWAY_ALLOWED_USERS",
-        "GH_TOKEN",
-        "GITHUB_APP_ID",
-        "GITHUB_APP_PRIVATE_KEY_PATH",
-        "GITHUB_APP_INSTALLATION_ID",
-        "MODAL_TOKEN_ID",
-        "MODAL_TOKEN_SECRET",
-        "DAYTONA_API_KEY",
-    })
+    # Vars not covered above but still Hermes-internal / conflict-prone.
+    blocked.update(
+        {
+            "OPENAI_BASE_URL",
+            "OPENAI_API_KEY",
+            "OPENAI_API_BASE",  # legacy alias
+            "OPENAI_ORG_ID",
+            "OPENAI_ORGANIZATION",
+            "OPENROUTER_API_KEY",
+            "ANTHROPIC_BASE_URL",
+            "ANTHROPIC_TOKEN",  # OAuth token (not in registry as env var)
+            "CLAUDE_CODE_OAUTH_TOKEN",
+            "LLM_MODEL",
+            # Expanded isolation for other major providers (Issue #1002)
+            "GOOGLE_API_KEY",  # Gemini / Google AI Studio
+            "DEEPSEEK_API_KEY",  # DeepSeek
+            "MISTRAL_API_KEY",  # Mistral AI
+            "GROQ_API_KEY",  # Groq
+            "TOGETHER_API_KEY",  # Together AI
+            "PERPLEXITY_API_KEY",  # Perplexity
+            "COHERE_API_KEY",  # Cohere
+            "FIREWORKS_API_KEY",  # Fireworks AI
+            "XAI_API_KEY",  # xAI (Grok)
+            "HELICONE_API_KEY",  # LLM Observability proxy
+            "PARALLEL_API_KEY",
+            "FIRECRAWL_API_KEY",
+            "FIRECRAWL_API_URL",
+            # Gateway/runtime config not represented in OPTIONAL_ENV_VARS.
+            "TELEGRAM_HOME_CHANNEL",
+            "TELEGRAM_HOME_CHANNEL_NAME",
+            "DISCORD_BOT_TOKEN",
+            "DISCORD_ALLOWED_USERS",
+            "DISCORD_HOME_CHANNEL",
+            "DISCORD_HOME_CHANNEL_NAME",
+            "DISCORD_REQUIRE_MENTION",
+            "DISCORD_FREE_RESPONSE_CHANNELS",
+            "DISCORD_AUTO_THREAD",
+            "SLACK_BOT_TOKEN",
+            "SLACK_APP_TOKEN",
+            "SLACK_ALLOWED_USERS",
+            "SLACK_HOME_CHANNEL",
+            "SLACK_HOME_CHANNEL_NAME",
+            "WHATSAPP_ENABLED",
+            "WHATSAPP_MODE",
+            "WHATSAPP_ALLOWED_USERS",
+            "SIGNAL_HTTP_URL",
+            "SIGNAL_ACCOUNT",
+            "SIGNAL_ALLOWED_USERS",
+            "SIGNAL_GROUP_ALLOWED_USERS",
+            "SIGNAL_HOME_CHANNEL",
+            "SIGNAL_HOME_CHANNEL_NAME",
+            "SIGNAL_IGNORE_STORIES",
+            "HASS_TOKEN",
+            "HASS_URL",
+            "EMAIL_ADDRESS",
+            "EMAIL_PASSWORD",
+            "EMAIL_IMAP_HOST",
+            "EMAIL_SMTP_HOST",
+            "EMAIL_HOME_ADDRESS",
+            "EMAIL_HOME_ADDRESS_NAME",
+            "GATEWAY_ALLOWED_USERS",
+            # Skills Hub / GitHub app auth paths and aliases.
+            "GH_TOKEN",
+            "GITHUB_APP_ID",
+            "GITHUB_APP_PRIVATE_KEY_PATH",
+            "GITHUB_APP_INSTALLATION_ID",
+            # Remote sandbox backend credentials.
+            "MODAL_TOKEN_ID",
+            "MODAL_TOKEN_SECRET",
+            "DAYTONA_API_KEY",
+            "ELEVENLABS_API_KEY",
+        }
+    )
     return frozenset(blocked)
 
 
 _HERMES_PROVIDER_ENV_BLOCKLIST = _build_provider_env_blocklist()
 
 
-def _sanitize_subprocess_env(base_env: dict | None, extra_env: dict | None = None) -> dict:
-    """Filter Hermes-managed secrets from a subprocess environment."""
+def _sanitize_subprocess_env(
+    base_env: dict | None, extra_env: dict | None = None
+) -> dict:
+    """Filter Hermes-managed secrets from a subprocess environment.
+
+    `_HERMES_FORCE_<VAR>` entries in ``extra_env`` opt a blocked variable back in
+    intentionally for callers that truly need it.  Vars registered via
+    :mod:`tools.env_passthrough` (skill-declared or user-configured) also
+    bypass the blocklist.
+    """
     try:
         from tools.env_passthrough import is_env_passthrough as _is_passthrough
     except Exception:
@@ -124,7 +146,7 @@ def _sanitize_subprocess_env(base_env: dict | None, extra_env: dict | None = Non
 
     for key, value in (extra_env or {}).items():
         if key.startswith(_HERMES_PROVIDER_ENV_FORCE_PREFIX):
-            real_key = key[len(_HERMES_PROVIDER_ENV_FORCE_PREFIX):]
+            real_key = key[len(_HERMES_PROVIDER_ENV_FORCE_PREFIX) :]
             sanitized[real_key] = value
         elif key not in _HERMES_PROVIDER_ENV_BLOCKLIST or _is_passthrough(key):
             sanitized[key] = value
@@ -158,9 +180,21 @@ def _find_bash() -> str:
         return found
 
     for candidate in (
-        os.path.join(os.environ.get("ProgramFiles", r"C:\Program Files"), "Git", "bin", "bash.exe"),
-        os.path.join(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)"), "Git", "bin", "bash.exe"),
-        os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs", "Git", "bin", "bash.exe"),
+        os.path.join(
+            os.environ.get("ProgramFiles", r"C:\Program Files"),
+            "Git",
+            "bin",
+            "bash.exe",
+        ),
+        os.path.join(
+            os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)"),
+            "Git",
+            "bin",
+            "bash.exe",
+        ),
+        os.path.join(
+            os.environ.get("LOCALAPPDATA", ""), "Programs", "Git", "bin", "bash.exe"
+        ),
     ):
         if candidate and os.path.isfile(candidate):
             return candidate
@@ -194,22 +228,15 @@ def _make_run_env(env: dict) -> dict:
     run_env = {}
     for k, v in merged.items():
         if k.startswith(_HERMES_PROVIDER_ENV_FORCE_PREFIX):
-            real_key = k[len(_HERMES_PROVIDER_ENV_FORCE_PREFIX):]
+            real_key = k[len(_HERMES_PROVIDER_ENV_FORCE_PREFIX) :]
             run_env[real_key] = v
         elif k not in _HERMES_PROVIDER_ENV_BLOCKLIST or _is_passthrough(k):
             run_env[k] = v
     existing_path = run_env.get("PATH", "")
     if "/usr/bin" not in existing_path.split(":"):
-        run_env["PATH"] = f"{existing_path}:{_SANE_PATH}" if existing_path else _SANE_PATH
-
-    # Per-profile HOME isolation: redirect system tool configs (git, ssh, gh,
-    # npm …) into {HERMES_HOME}/home/ when that directory exists.  Only the
-    # subprocess sees the override — the Python process keeps the real HOME.
-    from hermes_constants import get_subprocess_home
-    _profile_home = get_subprocess_home()
-    if _profile_home:
-        run_env["HOME"] = _profile_home
-
+        run_env["PATH"] = (
+            f"{existing_path}:{_SANE_PATH}" if existing_path else _SANE_PATH
+        )
     return run_env
 
 
@@ -221,7 +248,13 @@ class LocalEnvironment(BaseEnvironment):
     CWD persists via file-based read after each command.
     """
 
-    def __init__(self, cwd: str = "", timeout: int = 60, env: dict = None):
+    def __init__(
+        self,
+        cwd: str = "",
+        timeout: int = 60,
+        env: dict = None,
+        persistent: bool = False,
+    ):
         super().__init__(cwd=cwd or os.getcwd(), timeout=timeout, env=env)
         self.init_session()
 
@@ -242,14 +275,33 @@ class LocalEnvironment(BaseEnvironment):
             if candidate and candidate.startswith("/"):
                 return candidate.rstrip("/") or "/"
 
-        if os.path.isdir("/tmp") and os.access("/tmp", os.W_OK | os.X_OK):
-            return "/tmp"
+    def _kill_shell_children(self):
+        if self._shell_pid is None:
+            return
+        try:
+            subprocess.run(
+                ["pkill", "-P", str(self._shell_pid)],
+                capture_output=True,
+                timeout=5,
+            )
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            pass
 
         candidate = tempfile.gettempdir()
         if candidate.startswith("/"):
             return candidate.rstrip("/") or "/"
 
-        return "/tmp"
+    def _execute_oneshot(
+        self,
+        command: str,
+        cwd: str = "",
+        *,
+        timeout: int | None = None,
+        stdin_data: str | None = None,
+    ) -> dict:
+        work_dir = cwd or self.cwd or os.getcwd()
+        effective_timeout = timeout or self.timeout
+        exec_command, sudo_stdin = self._prepare_command(command)
 
     def _run_bash(self, cmd_string: str, *, login: bool = False,
                   timeout: int = 120,
@@ -266,28 +318,26 @@ class LocalEnvironment(BaseEnvironment):
             errors="replace",
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            stdin=subprocess.PIPE if stdin_data is not None else subprocess.DEVNULL,
+            stdin=subprocess.PIPE
+            if effective_stdin is not None
+            else subprocess.DEVNULL,
             preexec_fn=None if _IS_WINDOWS else os.setsid,
         )
 
-        if stdin_data is not None:
-            _pipe_stdin(proc, stdin_data)
+        if effective_stdin is not None:
 
-        return proc
-
-    def _kill_process(self, proc):
-        """Kill the entire process group (all children)."""
-        try:
-            if _IS_WINDOWS:
-                proc.terminate()
-            else:
-                pgid = os.getpgid(proc.pid)
-                os.killpg(pgid, signal.SIGTERM)
+            def _write_stdin():
                 try:
-                    proc.wait(timeout=1.0)
-                except subprocess.TimeoutExpired:
-                    os.killpg(pgid, signal.SIGKILL)
-        except (ProcessLookupError, PermissionError):
+                    proc.stdin.write(effective_stdin)
+                    proc.stdin.close()
+                except (BrokenPipeError, OSError):
+                    pass
+
+            threading.Thread(target=_write_stdin, daemon=True).start()
+
+        _output_chunks: list[str] = []
+
+        def _drain_stdout():
             try:
                 proc.kill()
             except Exception:
@@ -302,8 +352,44 @@ class LocalEnvironment(BaseEnvironment):
         except (OSError, FileNotFoundError):
             pass
 
-        # Still strip the marker from output so it's not visible
-        self._extract_cwd_from_output(result)
+        while proc.poll() is None:
+            if is_interrupted():
+                try:
+                    if _IS_WINDOWS:
+                        proc.terminate()
+                    else:
+                        pgid = os.getpgid(proc.pid)
+                        os.killpg(pgid, signal.SIGTERM)
+                        try:
+                            proc.wait(timeout=1.0)
+                        except subprocess.TimeoutExpired:
+                            os.killpg(pgid, signal.SIGKILL)
+                except (ProcessLookupError, PermissionError):
+                    proc.kill()
+                reader.join(timeout=2)
+                return {
+                    "output": "".join(_output_chunks)
+                    + "\n[Command interrupted — user sent a new message]",
+                    "returncode": 130,
+                }
+            if time.monotonic() > deadline:
+                try:
+                    if _IS_WINDOWS:
+                        proc.terminate()
+                    else:
+                        os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+                except (ProcessLookupError, PermissionError):
+                    proc.kill()
+                reader.join(timeout=2)
+                partial = "".join(_output_chunks)
+                timeout_msg = f"\n[Command timed out after {effective_timeout}s]"
+                return {
+                    "output": partial + timeout_msg
+                    if partial
+                    else timeout_msg.lstrip(),
+                    "returncode": 124,
+                }
+            time.sleep(0.2)
 
     def cleanup(self):
         """Clean up temp files."""

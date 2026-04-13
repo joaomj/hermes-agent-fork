@@ -415,14 +415,11 @@ class TestGetSectionConfigSummary:
         def env_side(key):
             if key == "TELEGRAM_BOT_TOKEN":
                 return "tok123"
-            if key == "DISCORD_BOT_TOKEN":
-                return "disc456"
             return ""
 
         with patch.object(setup_mod, "get_env_value", side_effect=env_side):
             result = setup_mod._get_section_config_summary({}, "gateway")
         assert "Telegram" in result
-        assert "Discord" in result
 
     def test_tools_returns_none_without_keys(self):
         with patch.object(setup_mod, "get_env_value", return_value=""):
@@ -501,7 +498,8 @@ class TestSetupWizardSkipsConfiguredSections:
         with (
             patch.object(setup_mod, "ensure_hermes_home"),
             patch.object(
-                setup_mod, "load_config",
+                setup_mod,
+                "load_config",
                 side_effect=[{}, reloaded_config],
             ),
             patch.object(setup_mod, "get_hermes_home", return_value=tmp_path),
@@ -512,7 +510,8 @@ class TestSetupWizardSkipsConfiguredSections:
             patch.object(setup_mod, "prompt_choice", return_value=1),
             # Migration succeeds and flips the env_side flag
             patch.object(
-                setup_mod, "_offer_openclaw_migration",
+                setup_mod,
+                "_offer_openclaw_migration",
                 side_effect=fake_migration,
             ),
             # User says No to all reconfig prompts

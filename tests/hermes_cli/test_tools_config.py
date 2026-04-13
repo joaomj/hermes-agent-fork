@@ -43,7 +43,9 @@ def test_get_platform_tools_includes_enabled_mcp_servers_by_default():
     config = {
         "mcp_servers": {
             "exa": {"url": "https://mcp.exa.ai/mcp"},
-            "web-search-prime": {"url": "https://api.z.ai/api/mcp/web_search_prime/mcp"},
+            "web-search-prime": {
+                "url": "https://api.z.ai/api/mcp/web_search_prime/mcp"
+            },
             "disabled-server": {"url": "https://example.com/mcp", "enabled": False},
         }
     }
@@ -60,7 +62,9 @@ def test_get_platform_tools_keeps_enabled_mcp_servers_with_explicit_builtin_sele
         "platform_toolsets": {"cli": ["web", "memory"]},
         "mcp_servers": {
             "exa": {"url": "https://mcp.exa.ai/mcp"},
-            "web-search-prime": {"url": "https://api.z.ai/api/mcp/web_search_prime/mcp"},
+            "web-search-prime": {
+                "url": "https://api.z.ai/api/mcp/web_search_prime/mcp"
+            },
         },
     }
 
@@ -169,11 +173,7 @@ def test_save_platform_tools_handles_empty_existing_config():
 
 def test_save_platform_tools_handles_invalid_existing_config():
     """Saving platform tools works when existing config is not a list."""
-    config = {
-        "platform_toolsets": {
-            "cli": "invalid-string-value"
-        }
-    }
+    config = {"platform_toolsets": {"cli": "invalid-string-value"}}
 
     with patch("hermes_cli.tools_config.save_config"):
         _save_platform_tools(config, "cli", {"web"})
@@ -199,19 +199,41 @@ def test_save_platform_tools_does_not_preserve_platform_default_toolsets():
     config = {
         "platform_toolsets": {
             "cli": [
-                "browser", "clarify", "code_execution", "cronjob",
-                "delegation", "file", "hermes-cli",  # <-- the culprit
-                "memory", "session_search", "skills", "terminal",
-                "todo", "tts", "vision", "web",
+                "browser",
+                "clarify",
+                "code_execution",
+                "cronjob",
+                "delegation",
+                "file",
+                "hermes-cli",  # <-- the culprit
+                "memory",
+                "session_search",
+                "skills",
+                "terminal",
+                "todo",
+                "tts",
+                "vision",
+                "web",
             ]
         }
     }
 
     # User unchecks image_gen, homeassistant, moa — keeps the rest
     new_selection = {
-        "browser", "clarify", "code_execution", "cronjob",
-        "delegation", "file", "memory", "session_search",
-        "skills", "terminal", "todo", "tts", "vision", "web",
+        "browser",
+        "clarify",
+        "code_execution",
+        "cronjob",
+        "delegation",
+        "file",
+        "memory",
+        "session_search",
+        "skills",
+        "terminal",
+        "todo",
+        "tts",
+        "vision",
+        "web",
     }
 
     with patch("hermes_cli.tools_config.save_config"):
@@ -238,7 +260,11 @@ def test_save_platform_tools_does_not_preserve_hermes_telegram():
     config = {
         "platform_toolsets": {
             "telegram": [
-                "browser", "file", "hermes-telegram", "terminal", "web",
+                "browser",
+                "file",
+                "hermes-telegram",
+                "terminal",
+                "web",
             ]
         }
     }
@@ -259,7 +285,11 @@ def test_save_platform_tools_still_preserves_mcp_with_platform_default_present()
     config = {
         "platform_toolsets": {
             "cli": [
-                "web", "terminal", "hermes-cli", "my-mcp-server", "github-tools",
+                "web",
+                "terminal",
+                "hermes-cli",
+                "my-mcp-server",
+                "github-tools",
             ]
         }
     }
@@ -286,34 +316,6 @@ def test_save_platform_tools_still_preserves_mcp_with_platform_default_present()
     assert "terminal" not in saved
 
 
-def test_visible_providers_include_nous_subscription_when_logged_in(monkeypatch):
-    monkeypatch.setenv("HERMES_ENABLE_NOUS_MANAGED_TOOLS", "1")
-    config = {"model": {"provider": "nous"}}
-
-    monkeypatch.setattr(
-        "hermes_cli.nous_subscription.get_nous_auth_status",
-        lambda: {"logged_in": True},
-    )
-
-    providers = _visible_providers(TOOL_CATEGORIES["browser"], config)
-
-    assert providers[0]["name"].startswith("Nous Subscription")
-
-
-def test_visible_providers_hide_nous_subscription_when_feature_flag_is_off(monkeypatch):
-    monkeypatch.delenv("HERMES_ENABLE_NOUS_MANAGED_TOOLS", raising=False)
-    config = {"model": {"provider": "nous"}}
-
-    monkeypatch.setattr(
-        "hermes_cli.nous_subscription.get_nous_auth_status",
-        lambda: {"logged_in": True},
-    )
-
-    providers = _visible_providers(TOOL_CATEGORIES["browser"], config)
-
-    assert all(not provider["name"].startswith("Nous Subscription") for provider in providers)
-
-
 def test_local_browser_provider_is_saved_explicitly(monkeypatch):
     config = {}
     local_provider = next(
@@ -327,58 +329,6 @@ def test_local_browser_provider_is_saved_explicitly(monkeypatch):
 
     assert config["browser"]["cloud_provider"] == "local"
 
-
-def test_first_install_nous_auto_configures_managed_defaults(monkeypatch):
-    monkeypatch.setenv("HERMES_ENABLE_NOUS_MANAGED_TOOLS", "1")
-    config = {
-        "model": {"provider": "nous"},
-        "platform_toolsets": {"cli": []},
-    }
-    for env_var in (
-        "VOICE_TOOLS_OPENAI_KEY",
-        "OPENAI_API_KEY",
-        "ELEVENLABS_API_KEY",
-        "FIRECRAWL_API_KEY",
-        "FIRECRAWL_API_URL",
-        "TAVILY_API_KEY",
-        "PARALLEL_API_KEY",
-        "BROWSERBASE_API_KEY",
-        "BROWSERBASE_PROJECT_ID",
-        "BROWSER_USE_API_KEY",
-        "FAL_KEY",
-    ):
-        monkeypatch.delenv(env_var, raising=False)
-
-    monkeypatch.setattr(
-        "hermes_cli.tools_config._prompt_toolset_checklist",
-        lambda *args, **kwargs: {"web", "image_gen", "tts", "browser"},
-    )
-    monkeypatch.setattr("hermes_cli.tools_config.save_config", lambda config: None)
-    # Prevent leaked platform tokens (e.g. DISCORD_BOT_TOKEN from gateway.run
-    # import) from adding extra platforms. The loop in tools_command runs
-    # apply_nous_managed_defaults per platform; a second iteration sees values
-    # set by the first as "explicit" and skips them.
-    monkeypatch.setattr(
-        "hermes_cli.tools_config._get_enabled_platforms",
-        lambda: ["cli"],
-    )
-    monkeypatch.setattr(
-        "hermes_cli.nous_subscription.get_nous_auth_status",
-        lambda: {"logged_in": True},
-    )
-
-    configured = []
-    monkeypatch.setattr(
-        "hermes_cli.tools_config._configure_toolset",
-        lambda ts_key, config: configured.append(ts_key),
-    )
-
-    tools_command(first_install=True, config=config)
-
-    assert config["web"]["backend"] == "firecrawl"
-    assert config["tts"]["provider"] == "openai"
-    assert config["browser"]["cloud_provider"] == "browser-use"
-    assert configured == []
 
 # ── Platform / toolset consistency ────────────────────────────────────────────
 
@@ -399,9 +349,12 @@ class TestPlatformToolsetConsistency:
             )
 
     def test_gateway_toolset_includes_all_messaging_platforms(self):
-        """hermes-gateway includes list should cover all messaging platforms."""
+        """Legacy hermes-gateway composite toolset is optional."""
         from hermes_cli.tools_config import PLATFORMS
         from toolsets import TOOLSETS
+
+        if "hermes-gateway" not in TOOLSETS:
+            return
 
         gateway_includes = set(TOOLSETS["hermes-gateway"]["includes"])
         # Exclude non-messaging platforms from the check

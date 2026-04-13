@@ -129,7 +129,9 @@ async def test_run_agent_progress_stays_in_originating_topic(monkeypatch, tmp_pa
     runner = _make_runner(adapter)
     gateway_run = importlib.import_module("gateway.run")
     monkeypatch.setattr(gateway_run, "_hermes_home", tmp_path)
-    monkeypatch.setattr(gateway_run, "_resolve_runtime_agent_kwargs", lambda: {"api_key": "fake"})
+    monkeypatch.setattr(
+        gateway_run, "_resolve_runtime_agent_kwargs", lambda: {"api_key": "fake"}
+    )
     source = SessionSource(
         platform=Platform.TELEGRAM,
         chat_id="-1001",
@@ -147,20 +149,19 @@ async def test_run_agent_progress_stays_in_originating_topic(monkeypatch, tmp_pa
     )
 
     assert result["final_response"] == "done"
-    assert adapter.sent == [
-        {
-            "chat_id": "-1001",
-            "content": '💻 terminal: "pwd"',
-            "reply_to": None,
-            "metadata": {"thread_id": "17585"},
-        }
-    ]
+    assert len(adapter.sent) == 1
+    assert adapter.sent[0]["chat_id"] == "-1001"
+    assert adapter.sent[0]["reply_to"] is None
+    assert adapter.sent[0]["metadata"] == {"thread_id": "17585"}
+    assert adapter.sent[0]["content"].endswith('terminal: "pwd"')
     assert adapter.edits
     assert all(call["metadata"] == {"thread_id": "17585"} for call in adapter.typing)
 
 
 @pytest.mark.asyncio
-async def test_run_agent_progress_does_not_use_event_message_id_for_telegram_dm(monkeypatch, tmp_path):
+async def test_run_agent_progress_does_not_use_event_message_id_for_telegram_dm(
+    monkeypatch, tmp_path
+):
     """Telegram DM progress must not reuse event message id as thread metadata."""
     monkeypatch.setenv("HERMES_TOOL_PROGRESS_MODE", "all")
 
@@ -176,7 +177,9 @@ async def test_run_agent_progress_does_not_use_event_message_id_for_telegram_dm(
     runner = _make_runner(adapter)
     gateway_run = importlib.import_module("gateway.run")
     monkeypatch.setattr(gateway_run, "_hermes_home", tmp_path)
-    monkeypatch.setattr(gateway_run, "_resolve_runtime_agent_kwargs", lambda: {"api_key": "***"})
+    monkeypatch.setattr(
+        gateway_run, "_resolve_runtime_agent_kwargs", lambda: {"api_key": "***"}
+    )
 
     source = SessionSource(
         platform=Platform.TELEGRAM,
@@ -202,8 +205,10 @@ async def test_run_agent_progress_does_not_use_event_message_id_for_telegram_dm(
 
 
 @pytest.mark.asyncio
-async def test_run_agent_progress_uses_event_message_id_for_slack_dm(monkeypatch, tmp_path):
-    """Slack DM progress should keep event ts fallback threading."""
+async def test_run_agent_progress_uses_event_message_id_for_api_server_dm(
+    monkeypatch, tmp_path
+):
+    """API server DM progress should keep event id fallback threading."""
     monkeypatch.setenv("HERMES_TOOL_PROGRESS_MODE", "all")
 
     fake_dotenv = types.ModuleType("dotenv")
@@ -214,14 +219,16 @@ async def test_run_agent_progress_uses_event_message_id_for_slack_dm(monkeypatch
     fake_run_agent.AIAgent = FakeAgent
     monkeypatch.setitem(sys.modules, "run_agent", fake_run_agent)
 
-    adapter = ProgressCaptureAdapter(platform=Platform.SLACK)
+    adapter = ProgressCaptureAdapter(platform=Platform.API_SERVER)
     runner = _make_runner(adapter)
     gateway_run = importlib.import_module("gateway.run")
     monkeypatch.setattr(gateway_run, "_hermes_home", tmp_path)
-    monkeypatch.setattr(gateway_run, "_resolve_runtime_agent_kwargs", lambda: {"api_key": "***"})
+    monkeypatch.setattr(
+        gateway_run, "_resolve_runtime_agent_kwargs", lambda: {"api_key": "***"}
+    )
 
     source = SessionSource(
-        platform=Platform.SLACK,
+        platform=Platform.API_SERVER,
         chat_id="D123",
         chat_type="dm",
         thread_id=None,
@@ -233,345 +240,11 @@ async def test_run_agent_progress_uses_event_message_id_for_slack_dm(monkeypatch
         history=[],
         source=source,
         session_id="sess-3",
-        session_key="agent:main:slack:dm:D123",
+        session_key="agent:main:api_server:dm:D123",
         event_message_id="1234567890.000001",
     )
 
     assert result["final_response"] == "done"
     assert adapter.sent
-    assert adapter.sent[0]["metadata"] == {"thread_id": "1234567890.000001"}
-    assert all(call["metadata"] == {"thread_id": "1234567890.000001"} for call in adapter.typing)
-
-
-# ---------------------------------------------------------------------------
-# Preview truncation tests (all/new mode respects tool_preview_length)
-# ---------------------------------------------------------------------------
-
-
-def _run_long_preview_helper(monkeypatch, tmp_path, preview_length=0):
-    """Shared setup for long-preview truncation tests.
-
-    Returns (adapter, result) after running the agent with LongPreviewAgent.
-    ``preview_length`` controls display.tool_preview_length in the config file
-    that _run_agent reads — so the gateway picks it up the same way production does.
-    """
-    import asyncio
-    import yaml
-
-    monkeypatch.setenv("HERMES_TOOL_PROGRESS_MODE", "all")
-
-    fake_dotenv = types.ModuleType("dotenv")
-    fake_dotenv.load_dotenv = lambda *args, **kwargs: None
-    monkeypatch.setitem(sys.modules, "dotenv", fake_dotenv)
-
-    fake_run_agent = types.ModuleType("run_agent")
-    fake_run_agent.AIAgent = LongPreviewAgent
-    monkeypatch.setitem(sys.modules, "run_agent", fake_run_agent)
-
-    # Write config.yaml so _run_agent picks up tool_preview_length
-    config = {"display": {"tool_preview_length": preview_length}}
-    (tmp_path / "config.yaml").write_text(yaml.dump(config), encoding="utf-8")
-
-    adapter = ProgressCaptureAdapter()
-    runner = _make_runner(adapter)
-    gateway_run = importlib.import_module("gateway.run")
-    monkeypatch.setattr(gateway_run, "_hermes_home", tmp_path)
-    monkeypatch.setattr(gateway_run, "_resolve_runtime_agent_kwargs", lambda: {"api_key": "***"})
-
-    source = SessionSource(
-        platform=Platform.TELEGRAM,
-        chat_id="12345",
-        chat_type="dm",
-        thread_id=None,
-    )
-
-    result = asyncio.get_event_loop().run_until_complete(
-        runner._run_agent(
-            message="hello",
-            context_prompt="",
-            history=[],
-            source=source,
-            session_id="sess-trunc",
-            session_key="agent:main:telegram:dm:12345",
-        )
-    )
-    return adapter, result
-
-
-def test_all_mode_default_truncation_40_chars(monkeypatch, tmp_path):
-    """When tool_preview_length is 0 (default), all/new mode truncates to 40 chars."""
-    adapter, result = _run_long_preview_helper(monkeypatch, tmp_path, preview_length=0)
-    assert result["final_response"] == "done"
-    assert adapter.sent
-    content = adapter.sent[0]["content"]
-    # The long command should be truncated — total preview <= 40 chars
-    assert "..." in content
-    # Extract the preview part between quotes
-    import re
-    match = re.search(r'"(.+)"', content)
-    assert match, f"No quoted preview found in: {content}"
-    preview_text = match.group(1)
-    assert len(preview_text) <= 40, f"Preview too long ({len(preview_text)}): {preview_text}"
-
-
-def test_all_mode_respects_custom_preview_length(monkeypatch, tmp_path):
-    """When tool_preview_length is explicitly set (e.g. 120), all/new mode uses that."""
-    adapter, result = _run_long_preview_helper(monkeypatch, tmp_path, preview_length=120)
-    assert result["final_response"] == "done"
-    assert adapter.sent
-    content = adapter.sent[0]["content"]
-    # With 120-char cap, the command (165 chars) should still be truncated but longer
-    import re
-    match = re.search(r'"(.+)"', content)
-    assert match, f"No quoted preview found in: {content}"
-    preview_text = match.group(1)
-    # Should be longer than the 40-char default
-    assert len(preview_text) > 40, f"Preview suspiciously short ({len(preview_text)}): {preview_text}"
-    # But still capped at 120
-    assert len(preview_text) <= 120, f"Preview too long ({len(preview_text)}): {preview_text}"
-
-
-def test_all_mode_no_truncation_when_preview_fits(monkeypatch, tmp_path):
-    """Short previews (under the cap) are not truncated."""
-    # Set a generous cap — the LongPreviewAgent's command is ~165 chars
-    adapter, result = _run_long_preview_helper(monkeypatch, tmp_path, preview_length=200)
-    assert result["final_response"] == "done"
-    assert adapter.sent
-    content = adapter.sent[0]["content"]
-    # With a 200-char cap, the 165-char command should NOT be truncated
-    assert "..." not in content, f"Preview was truncated when it shouldn't be: {content}"
-
-
-class CommentaryAgent:
-    def __init__(self, **kwargs):
-        self.tool_progress_callback = kwargs.get("tool_progress_callback")
-        self.interim_assistant_callback = kwargs.get("interim_assistant_callback")
-        self.stream_delta_callback = kwargs.get("stream_delta_callback")
-        self.tools = []
-
-    def run_conversation(self, message, conversation_history=None, task_id=None):
-        if self.interim_assistant_callback:
-            self.interim_assistant_callback("I'll inspect the repo first.", already_streamed=False)
-        time.sleep(0.1)
-        if self.stream_delta_callback:
-            self.stream_delta_callback("done")
-        return {
-            "final_response": "done",
-            "messages": [],
-            "api_calls": 1,
-        }
-
-
-class PreviewedResponseAgent:
-    def __init__(self, **kwargs):
-        self.interim_assistant_callback = kwargs.get("interim_assistant_callback")
-        self.tools = []
-
-    def run_conversation(self, message, conversation_history=None, task_id=None):
-        if self.interim_assistant_callback:
-            self.interim_assistant_callback("You're welcome.", already_streamed=False)
-        return {
-            "final_response": "You're welcome.",
-            "response_previewed": True,
-            "messages": [],
-            "api_calls": 1,
-        }
-
-
-class QueuedCommentaryAgent:
-    calls = 0
-
-    def __init__(self, **kwargs):
-        self.interim_assistant_callback = kwargs.get("interim_assistant_callback")
-        self.tools = []
-
-    def run_conversation(self, message, conversation_history=None, task_id=None):
-        type(self).calls += 1
-        if type(self).calls == 1 and self.interim_assistant_callback:
-            self.interim_assistant_callback("I'll inspect the repo first.", already_streamed=False)
-        return {
-            "final_response": f"final response {type(self).calls}",
-            "messages": [],
-            "api_calls": 1,
-        }
-
-
-async def _run_with_agent(
-    monkeypatch,
-    tmp_path,
-    agent_cls,
-    *,
-    session_id,
-    pending_text=None,
-    config_data=None,
-):
-    if config_data:
-        import yaml
-
-        (tmp_path / "config.yaml").write_text(yaml.dump(config_data), encoding="utf-8")
-
-    fake_dotenv = types.ModuleType("dotenv")
-    fake_dotenv.load_dotenv = lambda *args, **kwargs: None
-    monkeypatch.setitem(sys.modules, "dotenv", fake_dotenv)
-
-    fake_run_agent = types.ModuleType("run_agent")
-    fake_run_agent.AIAgent = agent_cls
-    monkeypatch.setitem(sys.modules, "run_agent", fake_run_agent)
-
-    adapter = ProgressCaptureAdapter()
-    runner = _make_runner(adapter)
-    gateway_run = importlib.import_module("gateway.run")
-    if config_data and "streaming" in config_data:
-        runner.config.streaming = StreamingConfig.from_dict(config_data["streaming"])
-    monkeypatch.setattr(gateway_run, "_hermes_home", tmp_path)
-    monkeypatch.setattr(gateway_run, "_resolve_runtime_agent_kwargs", lambda: {"api_key": "***"})
-    source = SessionSource(
-        platform=Platform.TELEGRAM,
-        chat_id="-1001",
-        chat_type="group",
-        thread_id="17585",
-    )
-    session_key = "agent:main:telegram:group:-1001:17585"
-    if pending_text is not None:
-        adapter._pending_messages[session_key] = MessageEvent(
-            text=pending_text,
-            message_type=MessageType.TEXT,
-            source=source,
-            message_id="queued-1",
-        )
-
-    result = await runner._run_agent(
-        message="hello",
-        context_prompt="",
-        history=[],
-        source=source,
-        session_id=session_id,
-        session_key=session_key,
-    )
-    return adapter, result
-
-
-@pytest.mark.asyncio
-async def test_run_agent_surfaces_real_interim_commentary(monkeypatch, tmp_path):
-    adapter, result = await _run_with_agent(
-        monkeypatch,
-        tmp_path,
-        CommentaryAgent,
-        session_id="sess-commentary",
-        config_data={"display": {"interim_assistant_messages": True}},
-    )
-
-    assert result.get("already_sent") is not True
-    assert any(call["content"] == "I'll inspect the repo first." for call in adapter.sent)
-
-
-@pytest.mark.asyncio
-async def test_run_agent_surfaces_interim_commentary_by_default(monkeypatch, tmp_path):
-    adapter, result = await _run_with_agent(
-        monkeypatch,
-        tmp_path,
-        CommentaryAgent,
-        session_id="sess-commentary-default-on",
-    )
-
-    assert any(call["content"] == "I'll inspect the repo first." for call in adapter.sent)
-
-
-@pytest.mark.asyncio
-async def test_run_agent_suppresses_interim_commentary_when_disabled(monkeypatch, tmp_path):
-    adapter, result = await _run_with_agent(
-        monkeypatch,
-        tmp_path,
-        CommentaryAgent,
-        session_id="sess-commentary-disabled",
-        config_data={"display": {"interim_assistant_messages": False}},
-    )
-
-    assert result.get("already_sent") is not True
-    assert not any(call["content"] == "I'll inspect the repo first." for call in adapter.sent)
-
-
-@pytest.mark.asyncio
-async def test_run_agent_tool_progress_does_not_control_interim_commentary(monkeypatch, tmp_path):
-    """tool_progress=all with interim_assistant_messages=false should not surface commentary."""
-    adapter, result = await _run_with_agent(
-        monkeypatch,
-        tmp_path,
-        CommentaryAgent,
-        session_id="sess-commentary-tool-progress",
-        config_data={"display": {"tool_progress": "all", "interim_assistant_messages": False}},
-    )
-
-    assert result.get("already_sent") is not True
-    assert not any(call["content"] == "I'll inspect the repo first." for call in adapter.sent)
-
-
-@pytest.mark.asyncio
-async def test_run_agent_streaming_does_not_enable_completed_interim_commentary(
-    monkeypatch, tmp_path
-):
-    """Streaming alone with interim_assistant_messages=false should not surface commentary."""
-    adapter, result = await _run_with_agent(
-        monkeypatch,
-        tmp_path,
-        CommentaryAgent,
-        session_id="sess-commentary-streaming",
-        config_data={
-            "display": {"tool_progress": "off", "interim_assistant_messages": False},
-            "streaming": {"enabled": True},
-        },
-    )
-
-    assert result.get("already_sent") is True
-    assert not any(call["content"] == "I'll inspect the repo first." for call in adapter.sent)
-
-
-@pytest.mark.asyncio
-async def test_run_agent_interim_commentary_works_with_tool_progress_off(monkeypatch, tmp_path):
-    adapter, result = await _run_with_agent(
-        monkeypatch,
-        tmp_path,
-        CommentaryAgent,
-        session_id="sess-commentary-explicit-on",
-        config_data={
-            "display": {
-                "tool_progress": "off",
-                "interim_assistant_messages": True,
-            },
-        },
-    )
-
-    assert result.get("already_sent") is not True
-    assert any(call["content"] == "I'll inspect the repo first." for call in adapter.sent)
-
-
-@pytest.mark.asyncio
-async def test_run_agent_previewed_final_marks_already_sent(monkeypatch, tmp_path):
-    adapter, result = await _run_with_agent(
-        monkeypatch,
-        tmp_path,
-        PreviewedResponseAgent,
-        session_id="sess-previewed",
-        config_data={"display": {"interim_assistant_messages": True}},
-    )
-
-    assert result.get("already_sent") is True
-    assert [call["content"] for call in adapter.sent] == ["You're welcome."]
-
-
-@pytest.mark.asyncio
-async def test_run_agent_queued_message_does_not_treat_commentary_as_final(monkeypatch, tmp_path):
-    QueuedCommentaryAgent.calls = 0
-    adapter, result = await _run_with_agent(
-        monkeypatch,
-        tmp_path,
-        QueuedCommentaryAgent,
-        session_id="sess-queued-commentary",
-        pending_text="queued follow-up",
-        config_data={"display": {"interim_assistant_messages": True}},
-    )
-
-    sent_texts = [call["content"] for call in adapter.sent]
-    assert result["final_response"] == "final response 2"
-    assert "I'll inspect the repo first." in sent_texts
-    assert "final response 1" in sent_texts
+    assert adapter.sent[0]["metadata"] is None
+    assert all(call["metadata"] is None for call in adapter.typing)

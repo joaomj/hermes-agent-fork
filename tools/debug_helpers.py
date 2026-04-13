@@ -2,7 +2,7 @@
 
 Replaces the identical DEBUG_MODE / _log_debug_call / _save_debug_log /
 get_debug_session_info boilerplate previously duplicated across web_tools,
-vision_tools, mixture_of_agents_tool, and image_generation_tool.
+vision_tools, and image_generation_tool.
 
 Usage in a tool module:
 
@@ -49,9 +49,10 @@ class DebugSession:
         self._start_time = datetime.datetime.now().isoformat() if self.enabled else ""
 
         if self.enabled:
-            self.log_dir.mkdir(parents=True, exist_ok=True)
-            logger.debug("%s debug mode enabled - Session ID: %s",
-                         tool_name, self.session_id)
+            self.log_dir.mkdir(exist_ok=True)
+            logger.debug(
+                "%s debug mode enabled - Session ID: %s", tool_name, self.session_id
+            )
 
     @property
     def active(self) -> bool:
@@ -61,11 +62,13 @@ class DebugSession:
         """Append a tool-call entry to the in-memory log."""
         if not self.enabled:
             return
-        self._calls.append({
-            "timestamp": datetime.datetime.now().isoformat(),
-            "tool_name": call_name,
-            **call_data,
-        })
+        self._calls.append(
+            {
+                "timestamp": datetime.datetime.now().isoformat(),
+                "tool_name": call_name,
+                **call_data,
+            }
+        )
 
     def save(self) -> None:
         """Flush the in-memory log to a JSON file in the logs directory."""
@@ -100,6 +103,8 @@ class DebugSession:
         return {
             "enabled": True,
             "session_id": self.session_id,
-            "log_path": str(self.log_dir / f"{self.tool_name}_debug_{self.session_id}.json"),
+            "log_path": str(
+                self.log_dir / f"{self.tool_name}_debug_{self.session_id}.json"
+            ),
             "total_calls": len(self._calls),
         }

@@ -20,6 +20,7 @@ from hermes_cli.main import cmd_update
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_run_side_effect(
     branch="main",
     verify_ok=True,
@@ -45,19 +46,23 @@ def _make_run_side_effect(
 
         # git rev-list HEAD..origin/{branch} --count
         if "rev-list" in joined:
-            return subprocess.CompletedProcess(cmd, 0, stdout=f"{commit_count}\n", stderr="")
+            return subprocess.CompletedProcess(
+                cmd, 0, stdout=f"{commit_count}\n", stderr=""
+            )
 
         # systemctl list-units hermes-gateway* — discover all gateway services
         if "systemctl" in joined and "list-units" in joined:
             if "--user" in joined and systemd_active:
                 return subprocess.CompletedProcess(
-                    cmd, 0,
+                    cmd,
+                    0,
                     stdout="hermes-gateway.service loaded active running Hermes Gateway\n",
                     stderr="",
                 )
             elif "--user" not in joined and system_service_active:
                 return subprocess.CompletedProcess(
-                    cmd, 0,
+                    cmd,
+                    0,
                     stdout="hermes-gateway.service loaded active running Hermes Gateway\n",
                     stderr="",
                 )
@@ -67,26 +72,47 @@ def _make_run_side_effect(
         if "systemctl" in joined and "is-active" in joined:
             if "--user" in joined:
                 if systemd_active:
-                    return subprocess.CompletedProcess(cmd, 0, stdout="active\n", stderr="")
-                return subprocess.CompletedProcess(cmd, 3, stdout="inactive\n", stderr="")
+                    return subprocess.CompletedProcess(
+                        cmd, 0, stdout="active\n", stderr=""
+                    )
+                return subprocess.CompletedProcess(
+                    cmd, 3, stdout="inactive\n", stderr=""
+                )
             else:
                 # System-level check (no --user)
                 if system_service_active:
-                    return subprocess.CompletedProcess(cmd, 0, stdout="active\n", stderr="")
-                return subprocess.CompletedProcess(cmd, 3, stdout="inactive\n", stderr="")
+                    return subprocess.CompletedProcess(
+                        cmd, 0, stdout="active\n", stderr=""
+                    )
+                return subprocess.CompletedProcess(
+                    cmd, 3, stdout="inactive\n", stderr=""
+                )
 
         # systemctl restart — distinguish --user from system scope
         if "systemctl" in joined and "restart" in joined:
             if "--user" not in joined and system_service_active:
-                stderr = "" if system_restart_rc == 0 else "Failed to restart: Permission denied"
-                return subprocess.CompletedProcess(cmd, system_restart_rc, stdout="", stderr=stderr)
+                stderr = (
+                    ""
+                    if system_restart_rc == 0
+                    else "Failed to restart: Permission denied"
+                )
+                return subprocess.CompletedProcess(
+                    cmd, system_restart_rc, stdout="", stderr=stderr
+                )
             return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
         # launchctl list ai.hermes.gateway
         if "launchctl" in joined and "list" in joined:
             if launchctl_loaded:
-                return subprocess.CompletedProcess(cmd, 0, stdout="PID\tStatus\tLabel\n123\t0\tai.hermes.gateway\n", stderr="")
-            return subprocess.CompletedProcess(cmd, 113, stdout="", stderr="Could not find service")
+                return subprocess.CompletedProcess(
+                    cmd,
+                    0,
+                    stdout="PID\tStatus\tLabel\n123\t0\tai.hermes.gateway\n",
+                    stderr="",
+                )
+            return subprocess.CompletedProcess(
+                cmd, 113, stdout="", stderr="Could not find service"
+            )
 
         return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
@@ -139,7 +165,11 @@ class TestLaunchdPlistPath:
     def test_plist_path_includes_venv_bin(self):
         plist = gateway_cli.generate_launchd_plist()
         detected = gateway_cli._detect_venv_dir()
-        venv_bin = str(detected / "bin") if detected else str(gateway_cli.PROJECT_ROOT / "venv" / "bin")
+        venv_bin = (
+            str(detected / "bin")
+            if detected
+            else str(gateway_cli.PROJECT_ROOT / "venv" / "bin")
+        )
         assert venv_bin in plist
 
     def test_plist_path_starts_with_venv_bin(self):
@@ -150,7 +180,11 @@ class TestLaunchdPlistPath:
                 path_value = lines[i + 1].strip()
                 path_value = path_value.replace("<string>", "").replace("</string>", "")
                 detected = gateway_cli._detect_venv_dir()
-                venv_bin = str(detected / "bin") if detected else str(gateway_cli.PROJECT_ROOT / "venv" / "bin")
+                venv_bin = (
+                    str(detected / "bin")
+                    if detected
+                    else str(gateway_cli.PROJECT_ROOT / "venv" / "bin")
+                )
                 assert path_value.startswith(venv_bin + ":")
                 break
         else:
@@ -176,7 +210,11 @@ class TestLaunchdPlistPath:
 
     def test_plist_path_deduplicates_venv_bin_when_already_in_path(self, monkeypatch):
         detected = gateway_cli._detect_venv_dir()
-        venv_bin = str(detected / "bin") if detected else str(gateway_cli.PROJECT_ROOT / "venv" / "bin")
+        venv_bin = (
+            str(detected / "bin")
+            if detected
+            else str(gateway_cli.PROJECT_ROOT / "venv" / "bin")
+        )
         monkeypatch.setenv("PATH", f"{venv_bin}:/usr/bin:/bin")
         plist = gateway_cli.generate_launchd_plist()
         lines = plist.splitlines()
@@ -220,6 +258,7 @@ class TestLaunchdPlistRefresh:
         monkeypatch.setattr(gateway_cli, "get_launchd_plist_path", lambda: plist_path)
 
         calls = []
+
         def fake_run(cmd, check=False, **kwargs):
             calls.append(cmd)
             return SimpleNamespace(returncode=0, stdout="", stderr="")
@@ -244,7 +283,8 @@ class TestLaunchdPlistRefresh:
 
         calls = []
         monkeypatch.setattr(
-            gateway_cli.subprocess, "run",
+            gateway_cli.subprocess,
+            "run",
             lambda cmd, **kw: calls.append(cmd) or SimpleNamespace(returncode=0),
         )
 
@@ -267,6 +307,7 @@ class TestLaunchdPlistRefresh:
         monkeypatch.setattr(gateway_cli, "get_launchd_plist_path", lambda: plist_path)
 
         calls = []
+
         def fake_run(cmd, check=False, **kwargs):
             calls.append(cmd)
             return SimpleNamespace(returncode=0, stdout="", stderr="")
@@ -280,7 +321,9 @@ class TestLaunchdPlistRefresh:
         assert any("bootout" in s for s in cmd_strs)
         assert any("kickstart" in s for s in cmd_strs)
 
-    def test_launchd_start_recreates_missing_plist_and_loads_service(self, tmp_path, monkeypatch):
+    def test_launchd_start_recreates_missing_plist_and_loads_service(
+        self, tmp_path, monkeypatch
+    ):
         """launchd_start self-heals when the plist file is missing entirely."""
         plist_path = tmp_path / "ai.hermes.gateway.plist"
         assert not plist_path.exists()
@@ -288,6 +331,7 @@ class TestLaunchdPlistRefresh:
         monkeypatch.setattr(gateway_cli, "get_launchd_plist_path", lambda: plist_path)
 
         calls = []
+
         def fake_run(cmd, check=False, **kwargs):
             calls.append(cmd)
             return SimpleNamespace(returncode=0, stdout="", stderr="")
@@ -314,7 +358,13 @@ class TestCmdUpdateLaunchdRestart:
     @patch("shutil.which", return_value=None)
     @patch("subprocess.run")
     def test_update_detects_launchd_and_skips_manual_restart_message(
-        self, mock_run, _mock_which, mock_args, capsys, tmp_path, monkeypatch,
+        self,
+        mock_run,
+        _mock_which,
+        mock_args,
+        capsys,
+        tmp_path,
+        monkeypatch,
     ):
         """When launchd is running the gateway, update should print
         'auto-restart via launchd' instead of 'Restart it with: hermes gateway run'."""
@@ -323,10 +373,14 @@ class TestCmdUpdateLaunchdRestart:
         plist_path.write_text("<plist/>")
 
         monkeypatch.setattr(
-            gateway_cli, "is_macos", lambda: True,
+            gateway_cli,
+            "is_macos",
+            lambda: True,
         )
         monkeypatch.setattr(
-            gateway_cli, "get_launchd_plist_path", lambda: plist_path,
+            gateway_cli,
+            "get_launchd_plist_path",
+            lambda: plist_path,
         )
 
         mock_run.side_effect = _make_run_side_effect(
@@ -335,8 +389,10 @@ class TestCmdUpdateLaunchdRestart:
         )
 
         # Mock launchd_restart + find_gateway_pids (new code discovers all gateways)
-        with patch.object(gateway_cli, "launchd_restart") as mock_launchd_restart, \
-             patch.object(gateway_cli, "find_gateway_pids", return_value=[]):
+        with (
+            patch.object(gateway_cli, "launchd_restart") as mock_launchd_restart,
+            patch.object(gateway_cli, "find_gateway_pids", return_value=[]),
+        ):
             cmd_update(mock_args)
 
         captured = capsys.readouterr().out
@@ -347,16 +403,26 @@ class TestCmdUpdateLaunchdRestart:
     @patch("shutil.which", return_value=None)
     @patch("subprocess.run")
     def test_update_without_launchd_shows_manual_restart(
-        self, mock_run, _mock_which, mock_args, capsys, tmp_path, monkeypatch,
+        self,
+        mock_run,
+        _mock_which,
+        mock_args,
+        capsys,
+        tmp_path,
+        monkeypatch,
     ):
         """When no service manager is running but manual gateway is found, show manual restart hint."""
         monkeypatch.setattr(
-            gateway_cli, "is_macos", lambda: True,
+            gateway_cli,
+            "is_macos",
+            lambda: True,
         )
         plist_path = tmp_path / "ai.hermes.gateway.plist"
         # plist does NOT exist — no launchd service
         monkeypatch.setattr(
-            gateway_cli, "get_launchd_plist_path", lambda: plist_path,
+            gateway_cli,
+            "get_launchd_plist_path",
+            lambda: plist_path,
         )
 
         mock_run.side_effect = _make_run_side_effect(
@@ -365,8 +431,10 @@ class TestCmdUpdateLaunchdRestart:
         )
 
         # Simulate a manual gateway process found by find_gateway_pids
-        with patch.object(gateway_cli, "find_gateway_pids", return_value=[12345]), \
-             patch("os.kill"):
+        with (
+            patch.object(gateway_cli, "find_gateway_pids", return_value=[12345]),
+            patch("os.kill"),
+        ):
             cmd_update(mock_args)
 
         captured = capsys.readouterr().out
@@ -375,11 +443,23 @@ class TestCmdUpdateLaunchdRestart:
     @patch("shutil.which", return_value=None)
     @patch("subprocess.run")
     def test_update_with_systemd_still_restarts_via_systemd(
-        self, mock_run, _mock_which, mock_args, capsys, monkeypatch,
+        self,
+        mock_run,
+        _mock_which,
+        mock_args,
+        capsys,
+        monkeypatch,
     ):
         """On Linux with systemd active, update should restart via systemctl."""
         monkeypatch.setattr(
-            gateway_cli, "is_macos", lambda: False,
+            gateway_cli,
+            "is_macos",
+            lambda: False,
+        )
+        monkeypatch.setattr(
+            gateway_cli,
+            "is_linux",
+            lambda: True,
         )
         monkeypatch.setattr(gateway_cli, "supports_systemd_services", lambda: True)
         monkeypatch.setattr(gateway_cli, "is_termux", lambda: False)
@@ -396,7 +476,8 @@ class TestCmdUpdateLaunchdRestart:
         assert "Restarted hermes-gateway" in captured
         # Verify systemctl restart was called
         restart_calls = [
-            c for c in mock_run.call_args_list
+            c
+            for c in mock_run.call_args_list
             if "restart" in " ".join(str(a) for a in c.args[0])
             and "systemctl" in " ".join(str(a) for a in c.args[0])
         ]
@@ -405,11 +486,18 @@ class TestCmdUpdateLaunchdRestart:
     @patch("shutil.which", return_value=None)
     @patch("subprocess.run")
     def test_update_no_gateway_running_skips_restart(
-        self, mock_run, _mock_which, mock_args, capsys, monkeypatch,
+        self,
+        mock_run,
+        _mock_which,
+        mock_args,
+        capsys,
+        monkeypatch,
     ):
         """When no gateway is running, update should skip the restart section entirely."""
         monkeypatch.setattr(
-            gateway_cli, "is_macos", lambda: False,
+            gateway_cli,
+            "is_macos",
+            lambda: False,
         )
 
         mock_run.side_effect = _make_run_side_effect(
@@ -437,7 +525,12 @@ class TestCmdUpdateSystemService:
     @patch("shutil.which", return_value=None)
     @patch("subprocess.run")
     def test_update_detects_system_service_and_restarts(
-        self, mock_run, _mock_which, mock_args, capsys, monkeypatch,
+        self,
+        mock_run,
+        _mock_which,
+        mock_args,
+        capsys,
+        monkeypatch,
     ):
         """When user systemd is inactive but a system service exists, restart via system scope."""
         monkeypatch.setattr(gateway_cli, "is_macos", lambda: False)
@@ -457,7 +550,8 @@ class TestCmdUpdateSystemService:
         assert "Restarted hermes-gateway" in captured
         # Verify systemctl restart (no --user) was called
         restart_calls = [
-            c for c in mock_run.call_args_list
+            c
+            for c in mock_run.call_args_list
             if "restart" in " ".join(str(a) for a in c.args[0])
             and "systemctl" in " ".join(str(a) for a in c.args[0])
             and "--user" not in " ".join(str(a) for a in c.args[0])
@@ -467,7 +561,12 @@ class TestCmdUpdateSystemService:
     @patch("shutil.which", return_value=None)
     @patch("subprocess.run")
     def test_update_system_service_restart_failure_shows_error(
-        self, mock_run, _mock_which, mock_args, capsys, monkeypatch,
+        self,
+        mock_run,
+        _mock_which,
+        mock_args,
+        capsys,
+        monkeypatch,
     ):
         """When system service restart fails, show the failure message."""
         monkeypatch.setattr(gateway_cli, "is_macos", lambda: False)
@@ -490,7 +589,12 @@ class TestCmdUpdateSystemService:
     @patch("shutil.which", return_value=None)
     @patch("subprocess.run")
     def test_user_service_takes_priority_over_system(
-        self, mock_run, _mock_which, mock_args, capsys, monkeypatch,
+        self,
+        mock_run,
+        _mock_which,
+        mock_args,
+        capsys,
+        monkeypatch,
     ):
         """When both user and system services are active, both are restarted."""
         monkeypatch.setattr(gateway_cli, "is_macos", lambda: False)

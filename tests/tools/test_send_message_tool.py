@@ -68,19 +68,24 @@ class TestSendMessageTool:
         config, _telegram_cfg = _make_config()
         config.get_home_channel = lambda _platform: home
 
-        with patch.dict(
-            os.environ,
-            {
-                "HERMES_CRON_AUTO_DELIVER_PLATFORM": "telegram",
-                "HERMES_CRON_AUTO_DELIVER_CHAT_ID": "-1001",
-            },
-            clear=False,
-        ), \
-             patch("gateway.config.load_gateway_config", return_value=config), \
-             patch("tools.interrupt.is_interrupted", return_value=False), \
-             patch("model_tools._run_async", side_effect=_run_async_immediately), \
-             patch("tools.send_message_tool._send_to_platform", new=AsyncMock(return_value={"success": True})) as send_mock, \
-             patch("gateway.mirror.mirror_to_session", return_value=True) as mirror_mock:
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "HERMES_CRON_AUTO_DELIVER_PLATFORM": "telegram",
+                    "HERMES_CRON_AUTO_DELIVER_CHAT_ID": "-1001",
+                },
+                clear=False,
+            ),
+            patch("gateway.config.load_gateway_config", return_value=config),
+            patch("tools.interrupt.is_interrupted", return_value=False),
+            patch("model_tools._run_async", side_effect=_run_async_immediately),
+            patch(
+                "tools.send_message_tool._send_to_platform",
+                new=AsyncMock(return_value={"success": True}),
+            ) as send_mock,
+            patch("gateway.mirror.mirror_to_session", return_value=True) as mirror_mock,
+        ):
             result = json.loads(
                 send_message_tool(
                     {
@@ -101,19 +106,24 @@ class TestSendMessageTool:
     def test_cron_different_target_still_sends(self):
         config, telegram_cfg = _make_config()
 
-        with patch.dict(
-            os.environ,
-            {
-                "HERMES_CRON_AUTO_DELIVER_PLATFORM": "telegram",
-                "HERMES_CRON_AUTO_DELIVER_CHAT_ID": "-1001",
-            },
-            clear=False,
-        ), \
-             patch("gateway.config.load_gateway_config", return_value=config), \
-             patch("tools.interrupt.is_interrupted", return_value=False), \
-             patch("model_tools._run_async", side_effect=_run_async_immediately), \
-             patch("tools.send_message_tool._send_to_platform", new=AsyncMock(return_value={"success": True})) as send_mock, \
-             patch("gateway.mirror.mirror_to_session", return_value=True) as mirror_mock:
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "HERMES_CRON_AUTO_DELIVER_PLATFORM": "telegram",
+                    "HERMES_CRON_AUTO_DELIVER_CHAT_ID": "-1001",
+                },
+                clear=False,
+            ),
+            patch("gateway.config.load_gateway_config", return_value=config),
+            patch("tools.interrupt.is_interrupted", return_value=False),
+            patch("model_tools._run_async", side_effect=_run_async_immediately),
+            patch(
+                "tools.send_message_tool._send_to_platform",
+                new=AsyncMock(return_value={"success": True}),
+            ) as send_mock,
+            patch("gateway.mirror.mirror_to_session", return_value=True) as mirror_mock,
+        ):
             result = json.loads(
                 send_message_tool(
                     {
@@ -134,25 +144,32 @@ class TestSendMessageTool:
             thread_id=None,
             media_files=[],
         )
-        mirror_mock.assert_called_once_with("telegram", "-1002", "hello", source_label="cli", thread_id=None)
+        mirror_mock.assert_called_once_with(
+            "telegram", "-1002", "hello", source_label="cli", thread_id=None
+        )
 
     def test_cron_same_chat_different_thread_still_sends(self):
         config, telegram_cfg = _make_config()
 
-        with patch.dict(
-            os.environ,
-            {
-                "HERMES_CRON_AUTO_DELIVER_PLATFORM": "telegram",
-                "HERMES_CRON_AUTO_DELIVER_CHAT_ID": "-1001",
-                "HERMES_CRON_AUTO_DELIVER_THREAD_ID": "17585",
-            },
-            clear=False,
-        ), \
-             patch("gateway.config.load_gateway_config", return_value=config), \
-             patch("tools.interrupt.is_interrupted", return_value=False), \
-             patch("model_tools._run_async", side_effect=_run_async_immediately), \
-             patch("tools.send_message_tool._send_to_platform", new=AsyncMock(return_value={"success": True})) as send_mock, \
-             patch("gateway.mirror.mirror_to_session", return_value=True) as mirror_mock:
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "HERMES_CRON_AUTO_DELIVER_PLATFORM": "telegram",
+                    "HERMES_CRON_AUTO_DELIVER_CHAT_ID": "-1001",
+                    "HERMES_CRON_AUTO_DELIVER_THREAD_ID": "17585",
+                },
+                clear=False,
+            ),
+            patch("gateway.config.load_gateway_config", return_value=config),
+            patch("tools.interrupt.is_interrupted", return_value=False),
+            patch("model_tools._run_async", side_effect=_run_async_immediately),
+            patch(
+                "tools.send_message_tool._send_to_platform",
+                new=AsyncMock(return_value={"success": True}),
+            ) as send_mock,
+            patch("gateway.mirror.mirror_to_session", return_value=True) as mirror_mock,
+        ):
             result = json.loads(
                 send_message_tool(
                     {
@@ -173,16 +190,23 @@ class TestSendMessageTool:
             thread_id="99999",
             media_files=[],
         )
-        mirror_mock.assert_called_once_with("telegram", "-1001", "hello", source_label="cli", thread_id="99999")
+        mirror_mock.assert_called_once_with(
+            "telegram", "-1001", "hello", source_label="cli", thread_id="99999"
+        )
 
     def test_sends_to_explicit_telegram_topic_target(self):
         config, telegram_cfg = _make_config()
 
-        with patch("gateway.config.load_gateway_config", return_value=config), \
-             patch("tools.interrupt.is_interrupted", return_value=False), \
-             patch("model_tools._run_async", side_effect=_run_async_immediately), \
-             patch("tools.send_message_tool._send_to_platform", new=AsyncMock(return_value={"success": True})) as send_mock, \
-             patch("gateway.mirror.mirror_to_session", return_value=True) as mirror_mock:
+        with (
+            patch("gateway.config.load_gateway_config", return_value=config),
+            patch("tools.interrupt.is_interrupted", return_value=False),
+            patch("model_tools._run_async", side_effect=_run_async_immediately),
+            patch(
+                "tools.send_message_tool._send_to_platform",
+                new=AsyncMock(return_value={"success": True}),
+            ) as send_mock,
+            patch("gateway.mirror.mirror_to_session", return_value=True) as mirror_mock,
+        ):
             result = json.loads(
                 send_message_tool(
                     {
@@ -202,17 +226,27 @@ class TestSendMessageTool:
             thread_id="17585",
             media_files=[],
         )
-        mirror_mock.assert_called_once_with("telegram", "-1001", "hello", source_label="cli", thread_id="17585")
+        mirror_mock.assert_called_once_with(
+            "telegram", "-1001", "hello", source_label="cli", thread_id="17585"
+        )
 
     def test_resolved_telegram_topic_name_preserves_thread_id(self):
         config, telegram_cfg = _make_config()
 
-        with patch("gateway.config.load_gateway_config", return_value=config), \
-             patch("tools.interrupt.is_interrupted", return_value=False), \
-             patch("gateway.channel_directory.resolve_channel_name", return_value="-1001:17585"), \
-             patch("model_tools._run_async", side_effect=_run_async_immediately), \
-             patch("tools.send_message_tool._send_to_platform", new=AsyncMock(return_value={"success": True})) as send_mock, \
-             patch("gateway.mirror.mirror_to_session", return_value=True):
+        with (
+            patch("gateway.config.load_gateway_config", return_value=config),
+            patch("tools.interrupt.is_interrupted", return_value=False),
+            patch(
+                "gateway.channel_directory.resolve_channel_name",
+                return_value="-1001:17585",
+            ),
+            patch("model_tools._run_async", side_effect=_run_async_immediately),
+            patch(
+                "tools.send_message_tool._send_to_platform",
+                new=AsyncMock(return_value={"success": True}),
+            ) as send_mock,
+            patch("gateway.mirror.mirror_to_session", return_value=True),
+        ):
             result = json.loads(
                 send_message_tool(
                     {
@@ -274,11 +308,16 @@ class TestSendMessageTool:
     def test_media_only_message_uses_placeholder_for_mirroring(self):
         config, telegram_cfg = _make_config()
 
-        with patch("gateway.config.load_gateway_config", return_value=config), \
-             patch("tools.interrupt.is_interrupted", return_value=False), \
-             patch("model_tools._run_async", side_effect=_run_async_immediately), \
-             patch("tools.send_message_tool._send_to_platform", new=AsyncMock(return_value={"success": True})) as send_mock, \
-             patch("gateway.mirror.mirror_to_session", return_value=True) as mirror_mock:
+        with (
+            patch("gateway.config.load_gateway_config", return_value=config),
+            patch("tools.interrupt.is_interrupted", return_value=False),
+            patch("model_tools._run_async", side_effect=_run_async_immediately),
+            patch(
+                "tools.send_message_tool._send_to_platform",
+                new=AsyncMock(return_value={"success": True}),
+            ) as send_mock,
+            patch("gateway.mirror.mirror_to_session", return_value=True) as mirror_mock,
+        ):
             result = json.loads(
                 send_message_tool(
                     {
@@ -448,137 +487,18 @@ class TestSendTelegramMediaDelivery:
 
 
 class TestSendToPlatformChunking:
-    def test_long_message_is_chunked(self):
-        """Messages exceeding the platform limit are split into multiple sends."""
-        send = AsyncMock(return_value={"success": True, "message_id": "1"})
-        long_msg = "word " * 1000  # ~5000 chars, well over Discord's 2000 limit
-        with patch("tools.send_message_tool._send_discord", send):
-            result = asyncio.run(
-                _send_to_platform(
-                    Platform.DISCORD,
-                    SimpleNamespace(enabled=True, token="***", extra={}),
-                    "ch", long_msg,
-                )
-            )
-        assert result["success"] is True
-        assert send.await_count >= 3
-        for call in send.await_args_list:
-            assert len(call.args[2]) <= 2020  # each chunk fits the limit
-
-    def test_slack_messages_are_formatted_before_send(self, monkeypatch):
-        _ensure_slack_mock(monkeypatch)
-
-        import gateway.platforms.slack as slack_mod
-
-        monkeypatch.setattr(slack_mod, "SLACK_AVAILABLE", True)
-        send = AsyncMock(return_value={"success": True, "message_id": "1"})
-
-        with patch("tools.send_message_tool._send_slack", send):
-            result = asyncio.run(
-                _send_to_platform(
-                    Platform.SLACK,
-                    SimpleNamespace(enabled=True, token="***", extra={}),
-                    "C123",
-                    "**hello** from [Hermes](<https://example.com>)",
-                )
-            )
-
-        assert result["success"] is True
-        send.assert_awaited_once_with(
-            "***",
-            "C123",
-            "*hello* from <https://example.com|Hermes>",
-        )
-
-    def test_slack_bold_italic_formatted_before_send(self, monkeypatch):
-        """Bold+italic ***text*** survives tool-layer formatting."""
-        _ensure_slack_mock(monkeypatch)
-        import gateway.platforms.slack as slack_mod
-
-        monkeypatch.setattr(slack_mod, "SLACK_AVAILABLE", True)
-        send = AsyncMock(return_value={"success": True, "message_id": "1"})
-        with patch("tools.send_message_tool._send_slack", send):
-            result = asyncio.run(
-                _send_to_platform(
-                    Platform.SLACK,
-                    SimpleNamespace(enabled=True, token="***", extra={}),
-                    "C123",
-                    "***important*** update",
-                )
-            )
-        assert result["success"] is True
-        sent_text = send.await_args.args[2]
-        assert "*_important_*" in sent_text
-
-    def test_slack_blockquote_formatted_before_send(self, monkeypatch):
-        """Blockquote '>' markers must survive formatting (not escaped to '&gt;')."""
-        _ensure_slack_mock(monkeypatch)
-        import gateway.platforms.slack as slack_mod
-
-        monkeypatch.setattr(slack_mod, "SLACK_AVAILABLE", True)
-        send = AsyncMock(return_value={"success": True, "message_id": "1"})
-        with patch("tools.send_message_tool._send_slack", send):
-            result = asyncio.run(
-                _send_to_platform(
-                    Platform.SLACK,
-                    SimpleNamespace(enabled=True, token="***", extra={}),
-                    "C123",
-                    "> important quote\n\nnormal text & stuff",
-                )
-            )
-        assert result["success"] is True
-        sent_text = send.await_args.args[2]
-        assert sent_text.startswith("> important quote")
-        assert "&amp;" in sent_text  # & is escaped
-        assert "&gt;" not in sent_text.split("\n")[0]  # > in blockquote is NOT escaped
-
-    def test_slack_pre_escaped_entities_not_double_escaped(self, monkeypatch):
-        """Pre-escaped HTML entities survive tool-layer formatting without double-escaping."""
-        _ensure_slack_mock(monkeypatch)
-        import gateway.platforms.slack as slack_mod
-        monkeypatch.setattr(slack_mod, "SLACK_AVAILABLE", True)
-        send = AsyncMock(return_value={"success": True, "message_id": "1"})
-        with patch("tools.send_message_tool._send_slack", send):
-            result = asyncio.run(
-                _send_to_platform(
-                    Platform.SLACK,
-                    SimpleNamespace(enabled=True, token="***", extra={}),
-                    "C123",
-                    "AT&amp;T &lt;tag&gt; test",
-                )
-            )
-        assert result["success"] is True
-        sent_text = send.await_args.args[2]
-        assert "&amp;amp;" not in sent_text
-        assert "&amp;lt;" not in sent_text
-        assert "AT&amp;T" in sent_text
-
-    def test_slack_url_with_parens_formatted_before_send(self, monkeypatch):
-        """Wikipedia-style URL with parens survives tool-layer formatting."""
-        _ensure_slack_mock(monkeypatch)
-        import gateway.platforms.slack as slack_mod
-        monkeypatch.setattr(slack_mod, "SLACK_AVAILABLE", True)
-        send = AsyncMock(return_value={"success": True, "message_id": "1"})
-        with patch("tools.send_message_tool._send_slack", send):
-            result = asyncio.run(
-                _send_to_platform(
-                    Platform.SLACK,
-                    SimpleNamespace(enabled=True, token="***", extra={}),
-                    "C123",
-                    "See [Foo](https://en.wikipedia.org/wiki/Foo_(bar))",
-                )
-            )
-        assert result["success"] is True
-        sent_text = send.await_args.args[2]
-        assert "<https://en.wikipedia.org/wiki/Foo_(bar)|Foo>" in sent_text
-
     def test_telegram_media_attaches_to_last_chunk(self):
 
         sent_calls = []
 
         async def fake_send(token, chat_id, message, media_files=None, thread_id=None):
             sent_calls.append(media_files or [])
-            return {"success": True, "platform": "telegram", "chat_id": chat_id, "message_id": str(len(sent_calls))}
+            return {
+                "success": True,
+                "platform": "telegram",
+                "chat_id": chat_id,
+                "message_id": str(len(sent_calls)),
+            }
 
         long_msg = "word " * 2000  # ~10000 chars, well over 4096
         media = [("/tmp/photo.png", False)]
@@ -587,7 +507,9 @@ class TestSendToPlatformChunking:
                 _send_to_platform(
                     Platform.TELEGRAM,
                     SimpleNamespace(enabled=True, token="tok", extra={}),
-                    "123", long_msg, media_files=media,
+                    "123",
+                    long_msg,
+                    media_files=media,
                 )
             )
         assert len(sent_calls) >= 3
@@ -598,25 +520,6 @@ class TestSendToPlatformChunking:
 # ---------------------------------------------------------------------------
 # HTML auto-detection in Telegram send
 # ---------------------------------------------------------------------------
-
-
-class TestSendToPlatformWhatsapp:
-    def test_whatsapp_routes_via_local_bridge_sender(self):
-        chat_id = "test-user@lid"
-        async_mock = AsyncMock(return_value={"success": True, "platform": "whatsapp", "chat_id": chat_id, "message_id": "abc123"})
-
-        with patch("tools.send_message_tool._send_whatsapp", async_mock):
-            result = asyncio.run(
-                _send_to_platform(
-                    Platform.WHATSAPP,
-                    SimpleNamespace(enabled=True, token=None, extra={"bridge_port": 3000}),
-                    chat_id,
-                    "hello from hermes",
-                )
-            )
-
-        assert result["success"] is True
-        async_mock.assert_awaited_once_with({"bridge_port": 3000}, chat_id, "hello from hermes")
 
 
 class TestSendTelegramHtmlDetection:
@@ -637,9 +540,7 @@ class TestSendTelegramHtmlDetection:
         bot = self._make_bot()
         _install_telegram_mock(monkeypatch, bot)
 
-        asyncio.run(
-            _send_telegram("tok", "123", "<b>Hello</b> world")
-        )
+        asyncio.run(_send_telegram("tok", "123", "<b>Hello</b> world"))
 
         bot.send_message.assert_awaited_once()
         kwargs = bot.send_message.await_args.kwargs
@@ -650,9 +551,7 @@ class TestSendTelegramHtmlDetection:
         bot = self._make_bot()
         _install_telegram_mock(monkeypatch, bot)
 
-        asyncio.run(
-            _send_telegram("tok", "123", "Just plain text, no tags")
-        )
+        asyncio.run(_send_telegram("tok", "123", "Just plain text, no tags"))
 
         bot.send_message.assert_awaited_once()
         kwargs = bot.send_message.await_args.kwargs

@@ -177,7 +177,9 @@ def _select_pool_entry(provider: str) -> Tuple[bool, Optional[Any]]:
     try:
         return True, pool.select()
     except Exception as exc:
-        logger.debug("Auxiliary client: could not select pool entry for %s: %s", provider, exc)
+        logger.debug(
+            "Auxiliary client: could not select pool entry for %s: %s", provider, exc
+        )
         return True, None
 
 
@@ -239,7 +241,11 @@ def _convert_content_for_responses(content: Any) -> Any:
         elif ptype == "image_url":
             # chat.completions nests the URL: {"image_url": {"url": "..."}}
             image_data = part.get("image_url", {})
-            url = image_data.get("url", "") if isinstance(image_data, dict) else str(image_data)
+            url = (
+                image_data.get("url", "")
+                if isinstance(image_data, dict)
+                else str(image_data)
+            )
             entry: Dict[str, Any] = {"type": "input_image", "image_url": url}
             # Preserve detail if specified
             detail = image_data.get("detail") if isinstance(image_data, dict) else None
@@ -281,10 +287,12 @@ class _CodexCompletionsAdapter:
             if role == "system":
                 instructions = content if isinstance(content, str) else str(content)
             else:
-                input_msgs.append({
-                    "role": role,
-                    "content": _convert_content_for_responses(content),
-                })
+                input_msgs.append(
+                    {
+                        "role": role,
+                        "content": _convert_content_for_responses(content),
+                    }
+                )
 
         resp_kwargs: Dict[str, Any] = {
             "model": model,
@@ -305,12 +313,14 @@ class _CodexCompletionsAdapter:
                 name = fn.get("name")
                 if not name:
                     continue
-                converted.append({
-                    "type": "function",
-                    "name": name,
-                    "description": fn.get("description", ""),
-                    "parameters": fn.get("parameters", {}),
-                })
+                converted.append(
+                    {
+                        "type": "function",
+                        "name": name,
+                        "description": fn.get("description", ""),
+                        "parameters": fn.get("parameters", {}),
+                    }
+                )
             if converted:
                 resp_kwargs["tools"] = converted
 
@@ -381,14 +391,16 @@ class _CodexCompletionsAdapter:
                         if ptype in ("output_text", "text"):
                             text_parts.append(_item_get(part, "text", ""))
                 elif item_type == "function_call":
-                    tool_calls_raw.append(SimpleNamespace(
-                        id=_item_get(item, "call_id", ""),
-                        type="function",
-                        function=SimpleNamespace(
-                            name=_item_get(item, "name", ""),
-                            arguments=_item_get(item, "arguments", "{}"),
-                        ),
-                    ))
+                    tool_calls_raw.append(
+                        SimpleNamespace(
+                            id=getattr(item, "call_id", ""),
+                            type="function",
+                            function=SimpleNamespace(
+                                name=getattr(item, "name", ""),
+                                arguments=getattr(item, "arguments", "{}"),
+                            ),
+                        )
+                    )
 
             resp_usage = getattr(final, "usage", None)
             if resp_usage:
@@ -458,6 +470,7 @@ class _AsyncCodexCompletionsAdapter:
 
     async def create(self, **kwargs) -> Any:
         import asyncio
+
         return await asyncio.to_thread(self._sync.create, **kwargs)
 
 
@@ -486,13 +499,18 @@ class _AnthropicCompletionsAdapter:
         self._is_oauth = is_oauth
 
     def create(self, **kwargs) -> Any:
-        from agent.anthropic_adapter import build_anthropic_kwargs, normalize_anthropic_response
+        from agent.anthropic_adapter import (
+            build_anthropic_kwargs,
+            normalize_anthropic_response,
+        )
 
         messages = kwargs.get("messages", [])
         model = kwargs.get("model", self._model)
         tools = kwargs.get("tools")
         tool_choice = kwargs.get("tool_choice")
-        max_tokens = kwargs.get("max_tokens") or kwargs.get("max_completion_tokens") or 2000
+        max_tokens = (
+            kwargs.get("max_tokens") or kwargs.get("max_completion_tokens") or 2000
+        )
         temperature = kwargs.get("temperature")
 
         normalized_tool_choice = None
@@ -524,7 +542,9 @@ class _AnthropicCompletionsAdapter:
         if hasattr(response, "usage") and response.usage:
             prompt_tokens = getattr(response.usage, "input_tokens", 0) or 0
             completion_tokens = getattr(response.usage, "output_tokens", 0) or 0
-            total_tokens = getattr(response.usage, "total_tokens", 0) or (prompt_tokens + completion_tokens)
+            total_tokens = getattr(response.usage, "total_tokens", 0) or (
+                prompt_tokens + completion_tokens
+            )
             usage = SimpleNamespace(
                 prompt_tokens=prompt_tokens,
                 completion_tokens=completion_tokens,
@@ -551,7 +571,14 @@ class _AnthropicChatShim:
 class AnthropicAuxiliaryClient:
     """OpenAI-client-compatible wrapper over a native Anthropic client."""
 
-    def __init__(self, real_client: Any, model: str, api_key: str, base_url: str, is_oauth: bool = False):
+    def __init__(
+        self,
+        real_client: Any,
+        model: str,
+        api_key: str,
+        base_url: str,
+        is_oauth: bool = False,
+    ):
         self._real_client = real_client
         adapter = _AnthropicCompletionsAdapter(real_client, model, is_oauth=is_oauth)
         self.chat = _AnthropicChatShim(adapter)
@@ -570,6 +597,7 @@ class _AsyncAnthropicCompletionsAdapter:
 
     async def create(self, **kwargs) -> Any:
         import asyncio
+
         return await asyncio.to_thread(self._sync.create, **kwargs)
 
 
@@ -652,6 +680,7 @@ def _read_codex_access_token() -> Optional[str]:
 
     try:
         from hermes_cli.auth import _read_codex_tokens
+
         data = _read_codex_tokens()
         tokens = data.get("tokens", {})
         access_token = tokens.get("access_token")
@@ -662,6 +691,7 @@ def _read_codex_access_token() -> Optional[str]:
         # prevent fallback to working providers (e.g. Anthropic).
         try:
             import base64
+
             payload = access_token.split(".")[1]
             payload += "=" * (-len(payload) % 4)
             claims = json.loads(base64.urlsafe_b64decode(payload))
@@ -685,7 +715,10 @@ def _resolve_api_key_provider() -> Tuple[Optional[OpenAI], Optional[str]]:
     credentials, or (None, None) if none are configured.
     """
     try:
-        from hermes_cli.auth import PROVIDER_REGISTRY, resolve_api_key_provider_credentials
+        from hermes_cli.auth import (
+            PROVIDER_REGISTRY,
+            resolve_api_key_provider_credentials,
+        )
     except ImportError:
         logger.debug("Could not import PROVIDER_REGISTRY for API-key fallback")
         return None, None
@@ -711,12 +744,11 @@ def _resolve_api_key_provider() -> Tuple[Optional[OpenAI], Optional[str]]:
             if not api_key:
                 continue
 
-            base_url = _to_openai_base_url(
-                _pool_runtime_base_url(entry, pconfig.inference_base_url) or pconfig.inference_base_url
+            base_url = (
+                _pool_runtime_base_url(entry, pconfig.inference_base_url)
+                or pconfig.inference_base_url
             )
-            model = _API_KEY_PROVIDER_AUX_MODELS.get(provider_id)
-            if model is None:
-                continue  # skip provider if we don't know a valid aux model
+            model = _API_KEY_PROVIDER_AUX_MODELS.get(provider_id, "default")
             logger.debug("Auxiliary text client: %s (%s) via pool", pconfig.name, model)
             extra = {}
             if "api.kimi.com" in base_url.lower():
@@ -732,12 +764,11 @@ def _resolve_api_key_provider() -> Tuple[Optional[OpenAI], Optional[str]]:
         if not api_key:
             continue
 
-        base_url = _to_openai_base_url(
-            str(creds.get("base_url", "")).strip().rstrip("/") or pconfig.inference_base_url
+        base_url = (
+            str(creds.get("base_url", "")).strip().rstrip("/")
+            or pconfig.inference_base_url
         )
-        model = _API_KEY_PROVIDER_AUX_MODELS.get(provider_id)
-        if model is None:
-            continue  # skip provider if we don't know a valid aux model
+        model = _API_KEY_PROVIDER_AUX_MODELS.get(provider_id, "default")
         logger.debug("Auxiliary text client: %s (%s)", pconfig.name, model)
         extra = {}
         if "api.kimi.com" in base_url.lower():
@@ -752,6 +783,7 @@ def _resolve_api_key_provider() -> Tuple[Optional[OpenAI], Optional[str]]:
 
 
 # ── Provider resolution helpers ─────────────────────────────────────────────
+
 
 def _get_auxiliary_provider(task: str = "") -> str:
     """Read the provider override for a specific auxiliary task.
@@ -785,17 +817,21 @@ def _try_openrouter() -> Tuple[Optional[OpenAI], Optional[str]]:
         or_key = _pool_runtime_api_key(entry)
         if not or_key:
             return None, None
-        base_url = _pool_runtime_base_url(entry, OPENROUTER_BASE_URL) or OPENROUTER_BASE_URL
+        base_url = (
+            _pool_runtime_base_url(entry, OPENROUTER_BASE_URL) or OPENROUTER_BASE_URL
+        )
         logger.debug("Auxiliary client: OpenRouter via pool")
-        return OpenAI(api_key=or_key, base_url=base_url,
-                       default_headers=_OR_HEADERS), _OPENROUTER_MODEL
+        return OpenAI(
+            api_key=or_key, base_url=base_url, default_headers=_OR_HEADERS
+        ), _OPENROUTER_MODEL
 
     or_key = os.getenv("OPENROUTER_API_KEY")
     if not or_key:
         return None, None
     logger.debug("Auxiliary client: OpenRouter")
-    return OpenAI(api_key=or_key, base_url=OPENROUTER_BASE_URL,
-                   default_headers=_OR_HEADERS), _OPENROUTER_MODEL
+    return OpenAI(
+        api_key=or_key, base_url=OPENROUTER_BASE_URL, default_headers=_OR_HEADERS
+    ), _OPENROUTER_MODEL
 
 
 def _try_nous(vision: bool = False) -> Tuple[Optional[OpenAI], Optional[str]]:
@@ -822,7 +858,9 @@ def _try_nous(vision: bool = False) -> Tuple[Optional[OpenAI], Optional[str]]:
     return (
         OpenAI(
             api_key=_nous_api_key(nous),
-            base_url=str(nous.get("inference_base_url") or _nous_base_url()).rstrip("/"),
+            base_url=str(nous.get("inference_base_url") or _nous_base_url()).rstrip(
+                "/"
+            ),
         ),
         model,
     )
@@ -836,6 +874,7 @@ def _read_main_model() -> str:
     """
     try:
         from hermes_cli.config import load_config
+
         cfg = load_config()
         model_cfg = cfg.get("model", {})
         if isinstance(model_cfg, str) and model_cfg.strip():
@@ -946,26 +985,29 @@ def _try_codex() -> Tuple[Optional[Any], Optional[str]]:
     pool_present, entry = _select_pool_entry("openai-codex")
     if pool_present:
         codex_token = _pool_runtime_api_key(entry)
-        if codex_token:
-            base_url = _pool_runtime_base_url(entry, _CODEX_AUX_BASE_URL) or _CODEX_AUX_BASE_URL
-        else:
-            codex_token = _read_codex_access_token()
-            if not codex_token:
-                return None, None
-            base_url = _CODEX_AUX_BASE_URL
+        if not codex_token:
+            return None, None
+        base_url = (
+            _pool_runtime_base_url(entry, _CODEX_AUX_BASE_URL) or _CODEX_AUX_BASE_URL
+        )
     else:
         codex_token = _read_codex_access_token()
         if not codex_token:
             return None, None
         base_url = _CODEX_AUX_BASE_URL
-    logger.debug("Auxiliary client: Codex OAuth (%s via Responses API)", _CODEX_AUX_MODEL)
+    logger.debug(
+        "Auxiliary client: Codex OAuth (%s via Responses API)", _CODEX_AUX_MODEL
+    )
     real_client = OpenAI(api_key=codex_token, base_url=base_url)
     return CodexAuxiliaryClient(real_client, _CODEX_AUX_MODEL), _CODEX_AUX_MODEL
 
 
 def _try_anthropic() -> Tuple[Optional[Any], Optional[str]]:
     try:
-        from agent.anthropic_adapter import build_anthropic_client, resolve_anthropic_token
+        from agent.anthropic_adapter import (
+            build_anthropic_client,
+            resolve_anthropic_token,
+        )
     except ImportError:
         return None, None
 
@@ -983,9 +1025,14 @@ def _try_anthropic() -> Tuple[Optional[Any], Optional[str]]:
     # Allow base URL override from config.yaml model.base_url, but only
     # when the configured provider is anthropic — otherwise a non-Anthropic
     # base_url (e.g. Codex endpoint) would leak into Anthropic requests.
-    base_url = _pool_runtime_base_url(entry, _ANTHROPIC_DEFAULT_BASE_URL) if pool_present else _ANTHROPIC_DEFAULT_BASE_URL
+    base_url = (
+        _pool_runtime_base_url(entry, _ANTHROPIC_DEFAULT_BASE_URL)
+        if pool_present
+        else _ANTHROPIC_DEFAULT_BASE_URL
+    )
     try:
         from hermes_cli.config import load_config
+
         cfg = load_config()
         model_cfg = cfg.get("model")
         if isinstance(model_cfg, dict):
@@ -998,9 +1045,15 @@ def _try_anthropic() -> Tuple[Optional[Any], Optional[str]]:
         pass
 
     from agent.anthropic_adapter import _is_oauth_token
+
     is_oauth = _is_oauth_token(token)
     model = _API_KEY_PROVIDER_AUX_MODELS.get("anthropic", "claude-haiku-4-5-20251001")
-    logger.debug("Auxiliary client: Anthropic native (%s) at %s (oauth=%s)", model, base_url, is_oauth)
+    logger.debug(
+        "Auxiliary client: Anthropic native (%s) at %s (oauth=%s)",
+        model,
+        base_url,
+        is_oauth,
+    )
     try:
         real_client = build_anthropic_client(token, base_url)
     except ImportError:
@@ -1008,7 +1061,49 @@ def _try_anthropic() -> Tuple[Optional[Any], Optional[str]]:
         # missing — build_anthropic_client raises ImportError at call time
         # when _anthropic_sdk is None.  Treat as unavailable.
         return None, None
-    return AnthropicAuxiliaryClient(real_client, model, token, base_url, is_oauth=is_oauth), model
+    return AnthropicAuxiliaryClient(
+        real_client, model, token, base_url, is_oauth=is_oauth
+    ), model
+
+
+def _resolve_forced_provider(forced: str) -> Tuple[Optional[OpenAI], Optional[str]]:
+    """Resolve a specific forced provider.  Returns (None, None) if creds missing."""
+    if forced == "openrouter":
+        client, model = _try_openrouter()
+        if client is None:
+            logger.warning(
+                "auxiliary.provider=openrouter but OPENROUTER_API_KEY not set"
+            )
+        return client, model
+
+    if forced == "nous":
+        client, model = _try_nous()
+        if client is None:
+            logger.warning(
+                "auxiliary.provider=nous but Nous Portal not configured (run: hermes login)"
+            )
+        return client, model
+
+    if forced == "codex":
+        client, model = _try_codex()
+        if client is None:
+            logger.warning(
+                "auxiliary.provider=codex but no Codex OAuth token found (run: hermes model)"
+            )
+        return client, model
+
+    if forced == "main":
+        # "main" = skip OpenRouter/Nous, use the main chat model's credentials.
+        for try_fn in (_try_custom_endpoint, _try_codex, _resolve_api_key_provider):
+            client, model = try_fn()
+            if client is not None:
+                return client, model
+        logger.warning("auxiliary.provider=main but no main endpoint credentials found")
+        return None, None
+
+    # Unknown provider name — fall through to auto
+    logger.warning("Unknown auxiliary.provider=%r, falling back to auto", forced)
+    return None, None
 
 
 _AUTO_PROVIDER_LABELS = {
@@ -1128,104 +1223,36 @@ def _try_payment_fallback(
     skip_chain_labels = {_alias_to_label.get(s, s) for s in skip_labels}
 
     tried = []
-    for label, try_fn in _get_provider_chain():
-        if label in skip_chain_labels:
-            continue
-        client, model = try_fn()
-        if client is not None:
-            logger.info(
-                "Auxiliary %s: %s on %s — falling back to %s (%s)",
-                task or "call", reason, failed_provider, label, model or "default",
-            )
-            return client, model, label
-        tried.append(label)
-
-    logger.warning(
-        "Auxiliary %s: %s on %s and no fallback available (tried: %s)",
-        task or "call", reason, failed_provider, ", ".join(tried),
-    )
-    return None, None, ""
-
-
-def _resolve_auto(main_runtime: Optional[Dict[str, Any]] = None) -> Tuple[Optional[OpenAI], Optional[str]]:
-    """Full auto-detection chain.
-
-    Priority:
-      1. If the user's main provider is NOT an aggregator (OpenRouter / Nous),
-         use their main provider + main model directly.  This ensures users on
-         Alibaba, DeepSeek, ZAI, etc. get auxiliary tasks handled by the same
-         provider they already have credentials for — no OpenRouter key needed.
-      2. OpenRouter → Nous → custom → Codex → API-key providers (original chain).
-    """
-    global auxiliary_is_nous, _stale_base_url_warned
-    auxiliary_is_nous = False  # Reset — _try_nous() will set True if it wins
-    runtime = _normalize_main_runtime(main_runtime)
-    runtime_provider = runtime.get("provider", "")
-    runtime_model = runtime.get("model", "")
-    runtime_base_url = runtime.get("base_url", "")
-    runtime_api_key = runtime.get("api_key", "")
-    runtime_api_mode = runtime.get("api_mode", "")
-
-    # ── Warn once if OPENAI_BASE_URL is set but config.yaml uses a named
-    #    provider (not 'custom').  This catches the common "env poisoning"
-    #    scenario where a user switches providers via `hermes model` but the
-    #    old OPENAI_BASE_URL lingers in ~/.hermes/.env. ──
-    if not _stale_base_url_warned:
-        _env_base = os.getenv("OPENAI_BASE_URL", "").strip()
-        _cfg_provider = runtime_provider or _read_main_provider()
-        if (_env_base and _cfg_provider
-                and _cfg_provider != "custom"
-                and not _cfg_provider.startswith("custom:")):
-            logger.warning(
-                "OPENAI_BASE_URL is set (%s) but model.provider is '%s'. "
-                "Auxiliary clients may route to the wrong endpoint. "
-                "Run: hermes model to reconfigure, or remove "
-                "OPENAI_BASE_URL from ~/.hermes/.env",
-                _env_base, _cfg_provider,
-            )
-            _stale_base_url_warned = True
-
-    # ── Step 1: non-aggregator main provider → use main model directly ──
-    main_provider = runtime_provider or _read_main_provider()
-    main_model = runtime_model or _read_main_model()
-    if (main_provider and main_model
-            and main_provider not in _AGGREGATOR_PROVIDERS
-            and main_provider not in ("auto", "")):
-        resolved_provider = main_provider
-        explicit_base_url = None
-        explicit_api_key = None
-        if runtime_base_url and (main_provider == "custom" or main_provider.startswith("custom:")):
-            resolved_provider = "custom"
-            explicit_base_url = runtime_base_url
-            explicit_api_key = runtime_api_key or None
-        client, resolved = resolve_provider_client(
-            resolved_provider,
-            main_model,
-            explicit_base_url=explicit_base_url,
-            explicit_api_key=explicit_api_key,
-            api_mode=runtime_api_mode or None,
-        )
-        if client is not None:
-            logger.info("Auxiliary auto-detect: using main provider %s (%s)",
-                        main_provider, resolved or main_model)
-            return client, resolved or main_model
-
-    # ── Step 2: aggregator / fallback chain ──────────────────────────────
-    tried = []
-    for label, try_fn in _get_provider_chain():
+    for try_fn in (
+        _try_openrouter,
+        _try_nous,
+        _try_custom_endpoint,
+        _try_codex,
+        _resolve_api_key_provider,
+    ):
+        fn_name = getattr(try_fn, "__name__", "unknown")
+        label = _AUTO_PROVIDER_LABELS.get(fn_name, fn_name)
         client, model = try_fn()
         if client is not None:
             if tried:
-                logger.info("Auxiliary auto-detect: using %s (%s) — skipped: %s",
-                            label, model or "default", ", ".join(tried))
+                logger.info(
+                    "Auxiliary auto-detect: using %s (%s) — skipped: %s",
+                    label,
+                    model or "default",
+                    ", ".join(tried),
+                )
             else:
-                logger.info("Auxiliary auto-detect: using %s (%s)", label, model or "default")
+                logger.info(
+                    "Auxiliary auto-detect: using %s (%s)", label, model or "default"
+                )
             return client, model
         tried.append(label)
-    logger.warning("Auxiliary auto-detect: no provider available (tried: %s). "
-                   "Compression, summarization, and memory flush will not work. "
-                   "Set OPENROUTER_API_KEY or configure a local model in config.yaml.",
-                   ", ".join(tried))
+    logger.warning(
+        "Auxiliary auto-detect: no provider available (tried: %s). "
+        "Compression, summarization, and memory flush will not work. "
+        "Set OPENROUTER_API_KEY or configure a local model in config.yaml.",
+        ", ".join(tried),
+    )
     return None, None
 
 
@@ -1366,33 +1393,49 @@ def resolve_provider_client(
         if model and "/" in model and resolved and "/" not in resolved:
             logger.debug(
                 "Dropping OpenRouter-format model %r for non-OpenRouter "
-                "auxiliary provider (using %r instead)", model, resolved)
+                "auxiliary provider (using %r instead)",
+                model,
+                resolved,
+            )
             model = None
         final_model = model or resolved
-        return (_to_async_client(client, final_model) if async_mode
-                else (client, final_model))
+        return (
+            _to_async_client(client, final_model)
+            if async_mode
+            else (client, final_model)
+        )
 
     # ── OpenRouter ───────────────────────────────────────────────────
     if provider == "openrouter":
         client, default = _try_openrouter()
         if client is None:
-            logger.warning("resolve_provider_client: openrouter requested "
-                           "but OPENROUTER_API_KEY not set")
+            logger.warning(
+                "resolve_provider_client: openrouter requested "
+                "but OPENROUTER_API_KEY not set"
+            )
             return None, None
-        final_model = _normalize_resolved_model(model or default, provider)
-        return (_to_async_client(client, final_model) if async_mode
-                else (client, final_model))
+        final_model = model or default
+        return (
+            _to_async_client(client, final_model)
+            if async_mode
+            else (client, final_model)
+        )
 
     # ── Nous Portal (OAuth) ──────────────────────────────────────────
     if provider == "nous":
         client, default = _try_nous()
         if client is None:
-            logger.warning("resolve_provider_client: nous requested "
-                           "but Nous Portal not configured (run: hermes auth)")
+            logger.warning(
+                "resolve_provider_client: nous requested "
+                "but Nous Portal not configured (run: hermes login)"
+            )
             return None, None
-        final_model = _normalize_resolved_model(model or default, provider)
-        return (_to_async_client(client, final_model) if async_mode
-                else (client, final_model))
+        final_model = model or default
+        return (
+            _to_async_client(client, final_model)
+            if async_mode
+            else (client, final_model)
+        )
 
     # ── OpenAI Codex (OAuth → Responses API) ─────────────────────────
     if provider == "openai-codex":
@@ -1401,8 +1444,10 @@ def resolve_provider_client(
             # access to responses.stream() (e.g., the main agent loop).
             codex_token = _read_codex_access_token()
             if not codex_token:
-                logger.warning("resolve_provider_client: openai-codex requested "
-                               "but no Codex OAuth token found (run: hermes model)")
+                logger.warning(
+                    "resolve_provider_client: openai-codex requested "
+                    "but no Codex OAuth token found (run: hermes model)"
+                )
                 return None, None
             final_model = _normalize_resolved_model(model or _CODEX_AUX_MODEL, provider)
             raw_client = OpenAI(api_key=codex_token, base_url=_CODEX_AUX_BASE_URL)
@@ -1410,12 +1455,17 @@ def resolve_provider_client(
         # Standard path: wrap in CodexAuxiliaryClient adapter
         client, default = _try_codex()
         if client is None:
-            logger.warning("resolve_provider_client: openai-codex requested "
-                           "but no Codex OAuth token found (run: hermes model)")
+            logger.warning(
+                "resolve_provider_client: openai-codex requested "
+                "but no Codex OAuth token found (run: hermes model)"
+            )
             return None, None
-        final_model = _normalize_resolved_model(model or default, provider)
-        return (_to_async_client(client, final_model) if async_mode
-                else (client, final_model))
+        final_model = model or default
+        return (
+            _to_async_client(client, final_model)
+            if async_mode
+            else (client, final_model)
+        )
 
     # ── Custom endpoint (OPENAI_BASE_URL + OPENAI_API_KEY) ───────────
     if provider == "custom":
@@ -1432,32 +1482,27 @@ def resolve_provider_client(
                     "but base_url is empty"
                 )
                 return None, None
-            final_model = _normalize_resolved_model(
-                model or _read_main_model() or "gpt-4o-mini",
-                provider,
+            final_model = model or _read_main_model() or "gpt-4o-mini"
+            client = OpenAI(api_key=custom_key, base_url=custom_base)
+            return (
+                _to_async_client(client, final_model)
+                if async_mode
+                else (client, final_model)
             )
-            extra = {}
-            if "api.kimi.com" in custom_base.lower():
-                extra["default_headers"] = {"User-Agent": "KimiCLI/1.30.0"}
-            elif "api.githubcopilot.com" in custom_base.lower():
-                from hermes_cli.models import copilot_default_headers
-                extra["default_headers"] = copilot_default_headers()
-            client = OpenAI(api_key=custom_key, base_url=custom_base, **extra)
-            client = _wrap_if_needed(client, final_model, custom_base)
-            return (_to_async_client(client, final_model) if async_mode
-                    else (client, final_model))
         # Try custom first, then codex, then API-key providers
-        for try_fn in (_try_custom_endpoint, _try_codex,
-                       _resolve_api_key_provider):
+        for try_fn in (_try_custom_endpoint, _try_codex, _resolve_api_key_provider):
             client, default = try_fn()
             if client is not None:
-                final_model = _normalize_resolved_model(model or default, provider)
-                _cbase = str(getattr(client, "base_url", "") or "")
-                client = _wrap_if_needed(client, final_model, _cbase)
-                return (_to_async_client(client, final_model) if async_mode
-                        else (client, final_model))
-        logger.warning("resolve_provider_client: custom/main requested "
-                       "but no endpoint credentials found")
+                final_model = model or default
+                return (
+                    _to_async_client(client, final_model)
+                    if async_mode
+                    else (client, final_model)
+                )
+        logger.warning(
+            "resolve_provider_client: custom/main requested "
+            "but no endpoint credentials found"
+        )
         return None, None
 
     # ── Named custom providers (config.yaml custom_providers list) ───
@@ -1488,7 +1533,10 @@ def resolve_provider_client(
 
     # ── API-key providers from PROVIDER_REGISTRY ─────────────────────
     try:
-        from hermes_cli.auth import PROVIDER_REGISTRY, resolve_api_key_provider_credentials
+        from hermes_cli.auth import (
+            PROVIDER_REGISTRY,
+            resolve_api_key_provider_credentials,
+        )
     except ImportError:
         logger.debug("hermes_cli.auth not available for provider %s", provider)
         return None, None
@@ -1502,10 +1550,16 @@ def resolve_provider_client(
         if provider == "anthropic":
             client, default_model = _try_anthropic()
             if client is None:
-                logger.warning("resolve_provider_client: anthropic requested but no Anthropic credentials found")
+                logger.warning(
+                    "resolve_provider_client: anthropic requested but no Anthropic credentials found"
+                )
                 return None, None
-            final_model = _normalize_resolved_model(model or default_model, provider)
-            return (_to_async_client(client, final_model) if async_mode else (client, final_model))
+            final_model = model or default_model
+            return (
+                _to_async_client(client, final_model)
+                if async_mode
+                else (client, final_model)
+            )
 
         creds = resolve_api_key_provider_credentials(provider)
         api_key = str(creds.get("api_key", "")).strip()
@@ -1513,13 +1567,17 @@ def resolve_provider_client(
             tried_sources = list(pconfig.api_key_env_vars)
             if provider == "copilot":
                 tried_sources.append("gh auth token")
-            logger.debug("resolve_provider_client: provider %s has no API "
-                         "key configured (tried: %s)",
-                         provider, ", ".join(tried_sources))
+            logger.debug(
+                "resolve_provider_client: provider %s has no API "
+                "key configured (tried: %s)",
+                provider,
+                ", ".join(tried_sources),
+            )
             return None, None
 
-        base_url = _to_openai_base_url(
-            str(creds.get("base_url", "")).strip().rstrip("/") or pconfig.inference_base_url
+        base_url = (
+            str(creds.get("base_url", "")).strip().rstrip("/")
+            or pconfig.inference_base_url
         )
 
         default_model = _API_KEY_PROVIDER_AUX_MODELS.get(provider, "")
@@ -1534,33 +1592,17 @@ def resolve_provider_client(
 
             headers.update(copilot_default_headers())
 
-        client = OpenAI(api_key=api_key, base_url=base_url,
-                        **({"default_headers": headers} if headers else {}))
-
-        # Copilot GPT-5+ models (except gpt-5-mini) require the Responses
-        # API — they are not accessible via /chat/completions.  Wrap the
-        # plain client in CodexAuxiliaryClient so call_llm() transparently
-        # routes through responses.stream().
-        if provider == "copilot" and final_model and not raw_codex:
-            try:
-                from hermes_cli.models import _should_use_copilot_responses_api
-                if _should_use_copilot_responses_api(final_model):
-                    logger.debug(
-                        "resolve_provider_client: copilot model %s needs "
-                        "Responses API — wrapping with CodexAuxiliaryClient",
-                        final_model)
-                    client = CodexAuxiliaryClient(client, final_model)
-            except ImportError:
-                pass
-
-        # Honor api_mode for any API-key provider (e.g. direct OpenAI with
-        # codex-family models).  The copilot-specific wrapping above handles
-        # copilot; this covers the general case (#6800).
-        client = _wrap_if_needed(client, final_model, base_url)
-
+        client = OpenAI(
+            api_key=api_key,
+            base_url=base_url,
+            **({"default_headers": headers} if headers else {}),
+        )
         logger.debug("resolve_provider_client: %s (%s)", provider, final_model)
-        return (_to_async_client(client, final_model) if async_mode
-                else (client, final_model))
+        return (
+            _to_async_client(client, final_model)
+            if async_mode
+            else (client, final_model)
+        )
 
     elif pconfig.auth_type in ("oauth_device_code", "oauth_external"):
         # OAuth providers — route through their specific try functions
@@ -1569,22 +1611,25 @@ def resolve_provider_client(
         if provider == "openai-codex":
             return resolve_provider_client("openai-codex", model, async_mode)
         # Other OAuth providers not directly supported
-        logger.warning("resolve_provider_client: OAuth provider %s not "
-                       "directly supported, try 'auto'", provider)
+        logger.warning(
+            "resolve_provider_client: OAuth provider %s not "
+            "directly supported, try 'auto'",
+            provider,
+        )
         return None, None
 
-    logger.warning("resolve_provider_client: unhandled auth_type %s for %s",
-                   pconfig.auth_type, provider)
+    logger.warning(
+        "resolve_provider_client: unhandled auth_type %s for %s",
+        pconfig.auth_type,
+        provider,
+    )
     return None, None
 
 
 # ── Public API ──────────────────────────────────────────────────────────────
 
-def get_text_auxiliary_client(
-    task: str = "",
-    *,
-    main_runtime: Optional[Dict[str, Any]] = None,
-) -> Tuple[Optional[OpenAI], Optional[str]]:
+
+def get_text_auxiliary_client(task: str = "") -> Tuple[Optional[OpenAI], Optional[str]]:
     """Return (client, default_model_slug) for text-only auxiliary tasks.
 
     Args:
@@ -1634,7 +1679,9 @@ def _normalize_vision_provider(provider: Optional[str]) -> str:
     return _normalize_aux_provider(provider, for_vision=True)
 
 
-def _resolve_strict_vision_backend(provider: str) -> Tuple[Optional[Any], Optional[str]]:
+def _resolve_strict_vision_backend(
+    provider: str,
+) -> Tuple[Optional[Any], Optional[str]]:
     provider = _normalize_vision_provider(provider)
     if provider == "openrouter":
         return _try_openrouter()
@@ -1660,22 +1707,14 @@ def get_available_vision_backends() -> List[str]:
     source of truth for setup, tool gating, and runtime auto-routing of
     vision tasks.
     """
-    available: List[str] = []
-    # 1. Active provider — if the user configured a provider, try it first.
-    main_provider = _read_main_provider()
-    if main_provider and main_provider not in ("auto", ""):
-        if main_provider in _VISION_AUTO_PROVIDER_ORDER:
-            if _strict_vision_backend_available(main_provider):
-                available.append(main_provider)
-        else:
-            client, _ = resolve_provider_client(main_provider, _read_main_model())
-            if client is not None:
-                available.append(main_provider)
-    # 2. OpenRouter, 3. Nous — skip if already covered by main provider.
-    for p in _VISION_AUTO_PROVIDER_ORDER:
-        if p not in available and _strict_vision_backend_available(p):
-            available.append(p)
-    return available
+    ordered = list(_VISION_AUTO_PROVIDER_ORDER)
+    preferred = _preferred_main_vision_provider()
+    if preferred in ordered:
+        ordered.remove(preferred)
+        ordered.insert(0, preferred)
+    return [
+        provider for provider in ordered if _strict_vision_backend_available(provider)
+    ]
 
 
 def resolve_vision_provider_client(
@@ -1693,12 +1732,14 @@ def resolve_vision_provider_client(
     backends, so users can intentionally force experimental providers. Auto mode
     stays conservative and only tries vision backends known to work today.
     """
-    requested, resolved_model, resolved_base_url, resolved_api_key, resolved_api_mode = _resolve_task_provider_model(
-        "vision", provider, model, base_url, api_key
+    requested, resolved_model, resolved_base_url, resolved_api_key = (
+        _resolve_task_provider_model("vision", provider, model, base_url, api_key)
     )
     requested = _normalize_vision_provider(requested)
 
-    def _finalize(resolved_provider: str, sync_client: Any, default_model: Optional[str]):
+    def _finalize(
+        resolved_provider: str, sync_client: Any, default_model: Optional[str]
+    ):
         if sync_client is None:
             return resolved_provider, None, None
         final_model = resolved_model or default_model
@@ -1770,7 +1811,7 @@ def resolve_vision_provider_client(
 
 def get_auxiliary_extra_body() -> dict:
     """Return extra_body kwargs for auxiliary API calls.
-    
+
     Includes Nous Portal product tags when the auxiliary client is backed
     by Nous Portal. Returns empty dict otherwise.
     """
@@ -1779,7 +1820,7 @@ def get_auxiliary_extra_body() -> dict:
 
 def auxiliary_max_tokens_param(value: int) -> dict:
     """Return the correct max tokens kwarg for the auxiliary client's provider.
-    
+
     OpenRouter and local models use 'max_tokens'. Direct OpenAI with newer
     models (gpt-4o, o-series, gpt-5+) requires 'max_completion_tokens'.
     The Codex adapter translates max_tokens internally, so we use max_tokens
@@ -1788,9 +1829,11 @@ def auxiliary_max_tokens_param(value: int) -> dict:
     custom_base = _current_custom_base_url()
     or_key = os.getenv("OPENROUTER_API_KEY")
     # Only use max_completion_tokens for direct OpenAI custom endpoints
-    if (not or_key
-            and _read_nous_auth() is None
-            and "api.openai.com" in custom_base.lower()):
+    if (
+        not or_key
+        and _read_nous_auth() is None
+        and "api.openai.com" in custom_base.lower()
+    ):
         return {"max_completion_tokens": value}
     return {"max_tokens": value}
 
@@ -1840,6 +1883,7 @@ def neuter_async_httpx_del() -> None:
     """
     try:
         from openai._base_client import AsyncHttpxClientWrapper
+
         AsyncHttpxClientWrapper.__del__ = lambda self: None  # type: ignore[assignment]
     except (ImportError, AttributeError):
         pass  # Graceful degradation if the SDK changes its internals
@@ -1858,6 +1902,7 @@ def _force_close_async_httpx(client: Any) -> None:
     """
     try:
         from httpx._client import ClientState
+
         inner = getattr(client, "_client", None)
         if inner is not None and not getattr(inner, "is_closed", True):
             inner._state = ClientState.CLOSED
@@ -1955,6 +2000,7 @@ def _get_cached_client(
     if async_mode:
         try:
             import asyncio as _aio
+
             current_loop = _aio.get_event_loop()
             loop_id = id(current_loop)
         except RuntimeError:
@@ -2030,6 +2076,7 @@ def _resolve_task_provider_model(
     if task:
         try:
             from hermes_cli.config import load_config
+
             config = load_config()
         except ImportError:
             config = {}
@@ -2098,6 +2145,7 @@ def _get_task_timeout(task: str, default: float = _DEFAULT_AUX_TIMEOUT) -> float
         return default
     try:
         from hermes_cli.config import load_config
+
         config = load_config()
     except ImportError:
         return default
@@ -2280,7 +2328,7 @@ def call_llm(
 
     Args:
         task: Auxiliary task name ("compression", "vision", "web_extract",
-              "session_search", "skills_hub", "mcp", "flush_memories").
+              "session_search", "mcp", "flush_memories").
               Reads provider:model from config/env. Ignored if provider is set.
         provider: Explicit provider override.
         model: Explicit model override.
@@ -2297,8 +2345,9 @@ def call_llm(
     Raises:
         RuntimeError: If no provider is configured.
     """
-    resolved_provider, resolved_model, resolved_base_url, resolved_api_key, resolved_api_mode = _resolve_task_provider_model(
-        task, provider, model, base_url, api_key)
+    resolved_provider, resolved_model, resolved_base_url, resolved_api_key = (
+        _resolve_task_provider_model(task, provider, model, base_url, api_key)
+    )
 
     if task == "vision":
         effective_provider, client, final_model = resolve_vision_provider_client(
@@ -2350,28 +2399,46 @@ def call_llm(
             # resolved_model may be an OpenRouter-format slug that doesn't
             # work on other providers.
             if not resolved_base_url:
-                logger.info("Auxiliary %s: provider %s unavailable, trying auto-detection chain",
-                            task or "call", resolved_provider)
-                client, final_model = _get_cached_client("auto", main_runtime=main_runtime)
+                logger.info(
+                    "Auxiliary %s: provider %s unavailable, falling back to openrouter",
+                    task or "call",
+                    resolved_provider,
+                )
+                client, final_model = _get_cached_client(
+                    "openrouter", resolved_model or _OPENROUTER_MODEL
+                )
         if client is None:
             raise RuntimeError(
                 f"No LLM provider configured for task={task} provider={resolved_provider}. "
-                f"Run: hermes setup")
+                f"Run: hermes setup"
+            )
 
     effective_timeout = timeout if timeout is not None else _get_task_timeout(task)
 
     # Log what we're about to do — makes auxiliary operations visible
     _base_info = str(getattr(client, "base_url", resolved_base_url) or "")
     if task:
-        logger.info("Auxiliary %s: using %s (%s)%s",
-                     task, resolved_provider or "auto", final_model or "default",
-                     f" at {_base_info}" if _base_info and "openrouter" not in _base_info else "")
+        logger.info(
+            "Auxiliary %s: using %s (%s)%s",
+            task,
+            resolved_provider or "auto",
+            final_model or "default",
+            f" at {_base_info}"
+            if _base_info and "openrouter" not in _base_info
+            else "",
+        )
 
     kwargs = _build_call_kwargs(
-        resolved_provider, final_model, messages,
-        temperature=temperature, max_tokens=max_tokens,
-        tools=tools, timeout=effective_timeout, extra_body=extra_body,
-        base_url=resolved_base_url)
+        resolved_provider,
+        final_model,
+        messages,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        tools=tools,
+        timeout=effective_timeout,
+        extra_body=extra_body,
+        base_url=resolved_base_url,
+    )
 
     # Convert image blocks for Anthropic-compatible endpoints (e.g. MiniMax)
     _client_base = str(getattr(client, "base_url", "") or "")
@@ -2456,8 +2523,10 @@ def extract_content_or_reasoning(response) -> str:
         cleaned = re.sub(
             r"<(?:think|thinking|reasoning|thought|REASONING_SCRATCHPAD)>"
             r".*?"
-            r"</(?:think|thinking|reasoning|thought|REASONING_SCRATCHPAD)>",
-            "", content, flags=re.DOTALL | re.IGNORECASE,
+            r"</(?:think|thinking|reasoning|REASONING_SCRATCHPAD)>",
+            "",
+            content,
+            flags=re.DOTALL | re.IGNORECASE,
         ).strip()
         if cleaned:
             return cleaned
@@ -2474,12 +2543,12 @@ def extract_content_or_reasoning(response) -> str:
         for detail in details:
             if isinstance(detail, dict):
                 summary = (
-                    detail.get("summary")
-                    or detail.get("content")
-                    or detail.get("text")
+                    detail.get("summary") or detail.get("content") or detail.get("text")
                 )
                 if summary and summary not in reasoning_parts:
-                    reasoning_parts.append(summary.strip() if isinstance(summary, str) else str(summary))
+                    reasoning_parts.append(
+                        summary.strip() if isinstance(summary, str) else str(summary)
+                    )
 
     if reasoning_parts:
         return "\n\n".join(reasoning_parts)
@@ -2505,8 +2574,9 @@ async def async_call_llm(
 
     Same as call_llm() but async. See call_llm() for full documentation.
     """
-    resolved_provider, resolved_model, resolved_base_url, resolved_api_key, resolved_api_mode = _resolve_task_provider_model(
-        task, provider, model, base_url, api_key)
+    resolved_provider, resolved_model, resolved_base_url, resolved_api_key = (
+        _resolve_task_provider_model(task, provider, model, base_url, api_key)
+    )
 
     if task == "vision":
         effective_provider, client, final_model = resolve_vision_provider_client(
@@ -2550,21 +2620,32 @@ async def async_call_llm(
                     f"variable, or switch to a different provider with `hermes model`."
                 )
             if not resolved_base_url:
-                logger.info("Auxiliary %s: provider %s unavailable, trying auto-detection chain",
-                            task or "call", resolved_provider)
-                client, final_model = _get_cached_client("auto", async_mode=True)
+                logger.warning(
+                    "Provider %s unavailable, falling back to openrouter",
+                    resolved_provider,
+                )
+                client, final_model = _get_cached_client(
+                    "openrouter", resolved_model or _OPENROUTER_MODEL, async_mode=True
+                )
         if client is None:
             raise RuntimeError(
                 f"No LLM provider configured for task={task} provider={resolved_provider}. "
-                f"Run: hermes setup")
+                f"Run: hermes setup"
+            )
 
     effective_timeout = timeout if timeout is not None else _get_task_timeout(task)
 
     kwargs = _build_call_kwargs(
-        resolved_provider, final_model, messages,
-        temperature=temperature, max_tokens=max_tokens,
-        tools=tools, timeout=effective_timeout, extra_body=extra_body,
-        base_url=resolved_base_url)
+        resolved_provider,
+        final_model,
+        messages,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        tools=tools,
+        timeout=effective_timeout,
+        extra_body=extra_body,
+        base_url=resolved_base_url,
+    )
 
     # Convert image blocks for Anthropic-compatible endpoints (e.g. MiniMax)
     _client_base = str(getattr(client, "base_url", "") or "")

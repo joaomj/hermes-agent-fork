@@ -59,7 +59,7 @@ def get_default_hermes_root() -> Path:
 def get_optional_skills_dir(default: Path | None = None) -> Path:
     """Return the optional-skills directory, honoring package-manager wrappers.
 
-    Packaged installs may ship ``optional-skills`` outside the Python package
+    Packaged installs may ship ``_optional-skills-available`` outside the Python package
     tree and expose it via ``HERMES_OPTIONAL_SKILLS``.
     """
     override = os.getenv("HERMES_OPTIONAL_SKILLS", "").strip()
@@ -67,7 +67,7 @@ def get_optional_skills_dir(default: Path | None = None) -> Path:
         return Path(override)
     if default is not None:
         return default
-    return get_hermes_home() / "optional-skills"
+    return get_hermes_home() / "_optional-skills-available"
 
 
 def get_hermes_dir(new_subpath: str, old_name: str) -> Path:

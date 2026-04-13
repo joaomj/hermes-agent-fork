@@ -19,19 +19,104 @@ from hermes_constants import get_hermes_home
 # Curses-based interactive picker (same pattern as hermes tools)
 # ---------------------------------------------------------------------------
 
+
 def _curses_select(title: str, items: list[tuple[str, str]], default: int = 0) -> int:
     """Interactive single-select with arrow keys.
 
     items: list of (label, description) tuples.
     Returns selected index, or default on escape/quit.
     """
-    from hermes_cli.curses_ui import curses_radiolist
-    # Format (label, desc) tuples into display strings
-    display_items = [
-        f"{label}  {desc}" if desc else label
-        for label, desc in items
-    ]
-    return curses_radiolist(title, display_items, selected=default, cancel_returns=default)
+    try:
+        import curses
+
+        result = [default]
+
+        def _menu(stdscr):
+            curses.curs_set(0)
+            if curses.has_colors():
+                curses.start_color()
+                curses.use_default_colors()
+                curses.init_pair(1, curses.COLOR_GREEN, -1)
+                curses.init_pair(2, curses.COLOR_YELLOW, -1)
+                curses.init_pair(3, curses.COLOR_CYAN, -1)
+            cursor = default
+
+            while True:
+                stdscr.clear()
+                max_y, max_x = stdscr.getmaxyx()
+
+                # Title
+                try:
+                    stdscr.addnstr(
+                        0,
+                        0,
+                        title,
+                        max_x - 1,
+                        curses.A_BOLD
+                        | (curses.color_pair(2) if curses.has_colors() else 0),
+                    )
+                    stdscr.addnstr(
+                        1,
+                        0,
+                        "  ↑↓ navigate  ⏎ select  q quit",
+                        max_x - 1,
+                        curses.color_pair(3) if curses.has_colors() else curses.A_DIM,
+                    )
+                except curses.error:
+                    pass
+
+                for i, (label, desc) in enumerate(items):
+                    y = i + 3
+                    if y >= max_y - 1:
+                        break
+                    arrow = "→" if i == cursor else " "
+                    line = f" {arrow}  {label}"
+                    if desc:
+                        line += f"  {desc}"
+
+                    attr = curses.A_NORMAL
+                    if i == cursor:
+                        attr = curses.A_BOLD
+                        if curses.has_colors():
+                            attr |= curses.color_pair(1)
+                    try:
+                        stdscr.addnstr(y, 0, line[: max_x - 1], max_x - 1, attr)
+                    except curses.error:
+                        pass
+
+                stdscr.refresh()
+                key = stdscr.getch()
+
+                if key in (curses.KEY_UP, ord("k")):
+                    cursor = (cursor - 1) % len(items)
+                elif key in (curses.KEY_DOWN, ord("j")):
+                    cursor = (cursor + 1) % len(items)
+                elif key in (curses.KEY_ENTER, 10, 13):
+                    result[0] = cursor
+                    return
+                elif key in (27, ord("q")):
+                    return
+
+        curses.wrapper(_menu)
+        return result[0]
+
+    except Exception:
+        # Fallback: numbered input
+        print(f"\n  {title}\n")
+        for i, (label, desc) in enumerate(items):
+            marker = "→" if i == default else " "
+            d = f"  {desc}" if desc else ""
+            print(f"  {marker} {i + 1}. {label}{d}")
+        while True:
+            try:
+                val = input(f"\n  Select [1-{len(items)}] ({default + 1}): ")
+                if not val:
+                    return default
+                idx = int(val) - 1
+                if 0 <= idx < len(items):
+                    return idx
+            except (ValueError, EOFError):
+                return default
 
 
 def _prompt(label: str, default: str | None = None, secret: bool = False) -> str:
@@ -55,6 +140,7 @@ def _prompt(label: str, default: str | None = None, secret: bool = False) -> str
 # Provider discovery
 # ---------------------------------------------------------------------------
 
+
 def _install_dependencies(provider_name: str) -> None:
     """Install pip dependencies declared in plugin.yaml."""
     import subprocess
@@ -67,6 +153,7 @@ def _install_dependencies(provider_name: str) -> None:
 
     try:
         import yaml
+
         with open(yaml_path) as f:
             meta = yaml.safe_load(f) or {}
     except Exception:
@@ -79,9 +166,6 @@ def _install_dependencies(provider_name: str) -> None:
     # pip name → import name mapping for packages where they differ
     _IMPORT_NAMES = {
         "honcho-ai": "honcho",
-        "mem0ai": "mem0",
-        "hindsight-client": "hindsight_client",
-        "hindsight-all": "hindsight",
     }
 
     # Check which packages are missing
@@ -108,8 +192,9 @@ def _install_dependencies(provider_name: str) -> None:
 
     try:
         subprocess.run(
-            [uv_path, "pip", "install", "--python", sys.executable, "--quiet"] + missing,
-            check=True, timeout=120,
+            [sys.executable, "-m", "pip", "install", "--quiet"] + missing,
+            check=True,
+            timeout=120,
             capture_output=True,
         )
         print(f"  ✓ Installed {', '.join(missing)}")
@@ -131,9 +216,7 @@ def _install_dependencies(provider_name: str) -> None:
         install_cmd = dep.get("install", "")
         if check_cmd:
             try:
-                subprocess.run(
-                    check_cmd, shell=True, capture_output=True, timeout=5
-                )
+                subprocess.run(check_cmd, shell=True, capture_output=True, timeout=5)
             except Exception:
                 if install_cmd:
                     print(f"\n  ⚠ '{dep_name}' not found. Install with:")
@@ -147,6 +230,7 @@ def _get_available_providers() -> list:
     """
     try:
         from plugins.memory import discover_memory_providers, load_memory_provider
+
         raw = discover_memory_providers()
     except Exception:
         raw = []
@@ -159,8 +243,12 @@ def _get_available_providers() -> list:
                 continue
         except Exception:
             continue
-
-        schema = provider.get_config_schema() if hasattr(provider, "get_config_schema") else []
+        # Override description with setup hint
+        schema = (
+            provider.get_config_schema()
+            if hasattr(provider, "get_config_schema")
+            else []
+        )
         has_secrets = any(f.get("secret") for f in schema)
         has_non_secrets = any(not f.get("secret") for f in schema)
         if has_secrets and has_non_secrets:
@@ -179,41 +267,6 @@ def _get_available_providers() -> list:
 # ---------------------------------------------------------------------------
 # Setup wizard
 # ---------------------------------------------------------------------------
-
-def cmd_setup_provider(provider_name: str) -> None:
-    """Run memory setup for a specific provider, skipping the picker."""
-    from hermes_cli.config import load_config, save_config
-
-    providers = _get_available_providers()
-    match = None
-    for name, desc, provider in providers:
-        if name == provider_name:
-            match = (name, desc, provider)
-            break
-
-    if not match:
-        print(f"\n  Memory provider '{provider_name}' not found.")
-        print("  Run 'hermes memory setup' to see available providers.\n")
-        return
-
-    name, _, provider = match
-
-    _install_dependencies(name)
-
-    config = load_config()
-    if not isinstance(config.get("memory"), dict):
-        config["memory"] = {}
-
-    if hasattr(provider, "post_setup"):
-        hermes_home = str(get_hermes_home())
-        provider.post_setup(hermes_home, config)
-        return
-
-    # Fallback: generic schema-based setup (same as cmd_setup)
-    config["memory"]["provider"] = name
-    save_config(config)
-    print(f"\n  Memory provider: {name}")
-    print(f"  Activation saved to config.yaml\n")
 
 
 def cmd_setup(args) -> None:
@@ -253,20 +306,17 @@ def cmd_setup(args) -> None:
     # Install pip dependencies if declared in plugin.yaml
     _install_dependencies(name)
 
-    # If the provider has a post_setup hook, delegate entirely to it.
-    # The hook handles its own config, connection test, and activation.
-    if hasattr(provider, "post_setup"):
-        hermes_home = str(get_hermes_home())
-        provider.post_setup(hermes_home, config)
-        return
-
-    schema = provider.get_config_schema() if hasattr(provider, "get_config_schema") else []
+    schema = (
+        provider.get_config_schema() if hasattr(provider, "get_config_schema") else []
+    )
 
     provider_config = config["memory"].get(name, {})
     if not isinstance(provider_config, dict):
         provider_config = {}
 
-    env_path = get_hermes_home() / ".env"
+    env_path = (
+        Path(os.environ.get("HERMES_HOME", os.path.expanduser("~/.hermes"))) / ".env"
+    )
     env_writes = {}
 
     if schema:
@@ -309,7 +359,9 @@ def cmd_setup(args) -> None:
                 existing = os.environ.get(env_var, "") if env_var else ""
                 if existing:
                     masked = f"...{existing[-4:]}" if len(existing) > 4 else "set"
-                    val = _prompt(f"{desc} (current: {masked}, blank to keep)", secret=True)
+                    val = _prompt(
+                        f"{desc} (current: {masked}, blank to keep)", secret=True
+                    )
                 else:
                     hint = f"  Get yours at {url}" if url else ""
                     if hint:
@@ -321,7 +373,9 @@ def cmd_setup(args) -> None:
                 # Regular text prompt
                 current = provider_config.get(key)
                 effective_default = current or default
-                val = _prompt(desc, default=str(effective_default) if effective_default else None)
+                val = _prompt(
+                    desc, default=str(effective_default) if effective_default else None
+                )
                 if val:
                     provider_config[key] = val
 
@@ -330,7 +384,9 @@ def cmd_setup(args) -> None:
     save_config(config)
 
     # Write non-secret config to provider's native location
-    hermes_home = str(get_hermes_home())
+    hermes_home = str(
+        Path(os.environ.get("HERMES_HOME", os.path.expanduser("~/.hermes")))
+    )
     if provider_config and hasattr(provider, "save_config"):
         try:
             provider.save_config(provider_config, hermes_home)
@@ -379,6 +435,7 @@ def _write_env_vars(env_path: Path, env_writes: dict) -> None:
 # Status
 # ---------------------------------------------------------------------------
 
+
 def cmd_status(args) -> None:
     """Show current memory provider config."""
     from hermes_cli.config import load_config
@@ -408,7 +465,11 @@ def cmd_status(args) -> None:
                         print(f"  Status:    available ✓")
                     else:
                         print(f"  Status:    not available ✗")
-                        schema = p.get_config_schema() if hasattr(p, "get_config_schema") else []
+                        schema = (
+                            p.get_config_schema()
+                            if hasattr(p, "get_config_schema")
+                            else []
+                        )
                         secrets = [f for f in schema if f.get("secret")]
                         if secrets:
                             print(f"  Missing:")
@@ -424,7 +485,9 @@ def cmd_status(args) -> None:
                     break
         else:
             print(f"\n  Plugin:    NOT installed ✗")
-            print(f"  Install the '{provider_name}' memory plugin to ~/.hermes/plugins/")
+            print(
+                f"  Install the '{provider_name}' memory plugin to ~/.hermes/plugins/"
+            )
 
     providers = _get_available_providers()
     if providers:
@@ -439,6 +502,7 @@ def cmd_status(args) -> None:
 # ---------------------------------------------------------------------------
 # Router
 # ---------------------------------------------------------------------------
+
 
 def memory_command(args) -> None:
     """Route memory subcommands."""

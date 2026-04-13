@@ -2,7 +2,7 @@
 """
 Skills Sync -- Manifest-based seeding and updating of bundled skills.
 
-Copies bundled skills from the repo's skills/ directory into ~/.hermes/skills/
+Copies bundled skills from the repo's _skills-available/ directory into ~/.hermes/skills/
 and uses a manifest to track which skills have been synced and their origin hash.
 
 Manifest format (v2): each line is "skill_name:origin_hash" where origin_hash
@@ -38,7 +38,7 @@ MANIFEST_FILE = SKILLS_DIR / ".bundled_manifest"
 
 
 def _get_bundled_dir() -> Path:
-    """Locate the bundled skills/ directory.
+    """Locate the bundled skills directory.
 
     Checks HERMES_BUNDLED_SKILLS env var first (set by Nix wrapper),
     then falls back to the relative path from this source file.
@@ -46,7 +46,7 @@ def _get_bundled_dir() -> Path:
     env_override = os.getenv("HERMES_BUNDLED_SKILLS")
     if env_override:
         return Path(env_override)
-    return Path(__file__).parent.parent / "skills"
+    return Path(__file__).parent.parent / "_skills-available"
 
 
 def _read_manifest() -> Dict[str, str]:
@@ -85,7 +85,10 @@ def _write_manifest(entries: Dict[str, str]):
     import tempfile
 
     MANIFEST_FILE.parent.mkdir(parents=True, exist_ok=True)
-    data = "\n".join(f"{name}:{hash_val}" for name, hash_val in sorted(entries.items())) + "\n"
+    data = (
+        "\n".join(f"{name}:{hash_val}" for name, hash_val in sorted(entries.items()))
+        + "\n"
+    )
 
     try:
         fd, tmp_path = tempfile.mkstemp(
@@ -106,7 +109,9 @@ def _write_manifest(entries: Dict[str, str]):
                 pass
             raise
     except Exception as e:
-        logger.debug("Failed to write skills manifest %s: %s", MANIFEST_FILE, e, exc_info=True)
+        logger.debug(
+            "Failed to write skills manifest %s: %s", MANIFEST_FILE, e, exc_info=True
+        )
 
 
 def _read_skill_name(skill_md: Path, fallback: str) -> str:
@@ -184,8 +189,12 @@ def sync_skills(quiet: bool = False) -> dict:
     bundled_dir = _get_bundled_dir()
     if not bundled_dir.exists():
         return {
-            "copied": [], "updated": [], "skipped": 0,
-            "user_modified": [], "cleaned": [], "total_bundled": 0,
+            "copied": [],
+            "updated": [],
+            "skipped": 0,
+            "user_modified": [],
+            "cleaned": [],
+            "total_bundled": 0,
         }
 
     SKILLS_DIR.mkdir(parents=True, exist_ok=True)

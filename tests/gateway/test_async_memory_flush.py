@@ -152,7 +152,7 @@ class TestGetOrCreateSessionNoCallback:
         idle_store._save()
 
         # Verify no _on_auto_reset attribute
-        assert not hasattr(idle_store, '_on_auto_reset')
+        assert not hasattr(idle_store, "_on_auto_reset")
 
         # This should NOT block (no sync LLM call)
         entry2 = idle_store.get_or_create_session(source)
@@ -175,13 +175,13 @@ class TestMemoryFlushedFlag:
 
     def test_persists_through_save_load(self, idle_store):
         """memory_flushed=True must survive a save/load cycle (simulates restart)."""
-        key = "agent:main:discord:thread:789"
+        key = "agent:main:telegram:thread:789"
         entry = SessionEntry(
             session_key=key,
             session_id="sid_flushed",
             created_at=datetime.now() - timedelta(hours=5),
             updated_at=datetime.now() - timedelta(hours=5),
-            platform=Platform.DISCORD,
+            platform=Platform.TELEGRAM,
             chat_type="thread",
             memory_flushed=True,
         )

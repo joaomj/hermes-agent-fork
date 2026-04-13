@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 PROJECT_ROOT = Path(__file__).parent.parent.resolve()
 
 _OPENCLAW_SCRIPT = (
-    get_optional_skills_dir(PROJECT_ROOT / "optional-skills")
+    get_optional_skills_dir(PROJECT_ROOT / "_optional-skills-available")
     / "migration"
     / "openclaw-migration"
     / "scripts"
@@ -295,7 +295,9 @@ def claw_command(args):
         print()
         print("Commands:")
         print("  migrate          Migrate settings from OpenClaw to Hermes")
-        print("  cleanup          Archive leftover OpenClaw directories after migration")
+        print(
+            "  cleanup          Archive leftover OpenClaw directories after migration"
+        )
         print()
         print("Run 'hermes claw <command> --help' for options.")
 
@@ -351,7 +353,9 @@ def _cmd_migrate(args):
         print()
         print_error(f"OpenClaw directory not found: {source_dir}")
         print_info("Make sure your OpenClaw installation is at the expected path.")
-        print_info("You can specify a custom path: hermes claw migrate --source /path/to/.openclaw")
+        print_info(
+            "You can specify a custom path: hermes claw migrate --source /path/to/.openclaw"
+        )
         return
 
     # Find the migration script
@@ -481,9 +485,57 @@ def _cmd_migrate(args):
     # Print results
     _print_migration_report(report, dry_run=False)
 
-    # Source directory is left untouched — archiving is not the migration
-    # tool's responsibility.  Users who want to clean up can run
-    # 'hermes claw cleanup' separately.
+    # After successful non-dry-run migration, offer to archive the source directory
+    if not dry_run and report.get("summary", {}).get("migrated", 0) > 0:
+        _offer_source_archival(source_dir, getattr(args, "yes", False))
+
+
+def _offer_source_archival(source_dir: Path, auto_yes: bool = False):
+    """After migration, offer to rename the source directory to prevent state fragmentation.
+
+    OpenClaw workspace directories contain state files (todo.json, sessions, etc.)
+    that the agent may discover and write to, causing confusion. Renaming the
+    directory prevents this.
+    """
+    if not source_dir.is_dir():
+        return
+
+    # Scan for state files that could cause problems
+    state_files = _scan_workspace_state(source_dir)
+
+    print()
+    print_header("Post-Migration Cleanup")
+    print_info("The OpenClaw directory still exists and contains workspace state files")
+    print_info("that can confuse the agent (todo lists, sessions, logs).")
+    if state_files:
+        print()
+        print(color("  Found state files:", Colors.YELLOW))
+        # Show up to 10 most relevant findings
+        for path, desc in state_files[:10]:
+            print(f"      {desc}")
+        if len(state_files) > 10:
+            print(f"      ... and {len(state_files) - 10} more")
+    print()
+    print_info(
+        f"Recommend: rename {source_dir.name}/ to {source_dir.name}.pre-migration/"
+    )
+    print_info("This prevents the agent from discovering old workspace directories.")
+    print_info("You can always rename it back if needed.")
+    print()
+
+    if auto_yes or prompt_yes_no(f"Archive {source_dir} now?", default=True):
+        try:
+            archive_path = _archive_directory(source_dir)
+            print_success(f"Archived: {source_dir} → {archive_path}")
+            print_info("The original directory has been renamed, not deleted.")
+            print_info(f"To undo: mv {archive_path} {source_dir}")
+        except OSError as e:
+            print_error(f"Could not archive: {e}")
+            print_info(
+                f"You can do it manually: mv {source_dir} {source_dir}.pre-migration"
+            )
+    else:
+        print_info("Skipped. You can archive later with: hermes claw cleanup")
 
 
 def _cmd_cleanup(args):
@@ -561,9 +613,14 @@ def _cmd_cleanup(args):
         # Show directory stats
         try:
             workspace_dirs = [
-                d for d in source_dir.iterdir()
-                if d.is_dir() and not d.name.startswith(".")
-                and any((d / name).exists() for name in ("todo.json", "SOUL.md", "MEMORY.md", "USER.md"))
+                d
+                for d in source_dir.iterdir()
+                if d.is_dir()
+                and not d.name.startswith(".")
+                and any(
+                    (d / name).exists()
+                    for name in ("todo.json", "SOUL.md", "MEMORY.md", "USER.md")
+                )
             ]
         except OSError:
             workspace_dirs = []
@@ -587,7 +644,12 @@ def _cmd_cleanup(args):
 
         if state_files:
             print()
-            print(color(f"  {len(state_files)} state file(s) found:", Colors.YELLOW))
+            print(
+                color(
+                    f"  {len(state_files)} state file(s) that could cause confusion:",
+                    Colors.YELLOW,
+                )
+            )
             for path, desc in state_files[:8]:
                 print(f"      {desc}")
             if len(state_files) > 8:
@@ -609,18 +671,24 @@ def _cmd_cleanup(args):
                     total_archived += 1
                 except OSError as e:
                     print_error(f"Could not archive: {e}")
-                    print_info(f"Try manually: mv {source_dir} {source_dir}.pre-migration")
+                    print_info(
+                        f"Try manually: mv {source_dir} {source_dir}.pre-migration"
+                    )
             else:
                 print_info("Skipped.")
 
     # Summary
     print()
     if dry_run:
-        print_info(f"Dry run complete. {len(dirs_to_check)} directory(ies) would be archived.")
+        print_info(
+            f"Dry run complete. {len(dirs_to_check)} directory(ies) would be archived."
+        )
         print_info("Run without --dry-run to archive them.")
     elif total_archived:
         print_success(f"Cleaned up {total_archived} OpenClaw directory(ies).")
-        print_info("Directories were renamed, not deleted. You can undo by renaming them back.")
+        print_info(
+            "Directories were renamed, not deleted. You can undo by renaming them back."
+        )
     else:
         print_info("No directories were archived.")
 
@@ -665,7 +733,11 @@ def _print_migration_report(report: dict, dry_run: bool):
             print()
 
         if conflict_items:
-            print(color("  ⚠ Conflicts (skipped — use --overwrite to force):", Colors.YELLOW))
+            print(
+                color(
+                    "  ⚠ Conflicts (skipped — use --overwrite to force):", Colors.YELLOW
+                )
+            )
             for item in conflict_items:
                 kind = item.get("kind", "unknown")
                 reason = item.get("reason", "already exists")
@@ -719,13 +791,24 @@ def _print_migration_report(report: dict, dry_run: bool):
         print_success("Migration complete!")
         # Warn if API keys were skipped (migrate_secrets not enabled)
         skipped_keys = [
-            i for i in report.get("items", [])
+            i
+            for i in report.get("items", [])
             if i.get("kind") == "provider-keys" and i.get("status") == "skipped"
         ]
         if skipped_keys:
             print()
-            print(color("  ⚠ API keys were NOT migrated (secrets migration is disabled by default).", Colors.YELLOW))
-            print(color("  Your OPENROUTER_API_KEY and other provider keys must be added manually.", Colors.YELLOW))
+            print(
+                color(
+                    "  ⚠ API keys were NOT migrated (secrets migration is disabled by default).",
+                    Colors.YELLOW,
+                )
+            )
+            print(
+                color(
+                    "  Your OPENROUTER_API_KEY and other provider keys must be added manually.",
+                    Colors.YELLOW,
+                )
+            )
             print()
             print_info("To migrate API keys, re-run with:")
             print_info("  hermes claw migrate --migrate-secrets")

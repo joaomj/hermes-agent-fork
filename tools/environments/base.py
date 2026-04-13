@@ -251,31 +251,17 @@ class BaseEnvironment(ABC):
         self.timeout = timeout
         self.env = env or {}
 
-        self._session_id = uuid.uuid4().hex[:12]
-        temp_dir = self.get_temp_dir().rstrip("/") or "/"
-        self._snapshot_path = f"{temp_dir}/hermes-snap-{self._session_id}.sh"
-        self._cwd_file = f"{temp_dir}/hermes-cwd-{self._session_id}.txt"
-        self._cwd_marker = _cwd_marker(self._session_id)
-        self._snapshot_ready = False
-
-    # ------------------------------------------------------------------
-    # Abstract methods
-    # ------------------------------------------------------------------
-
-    def _run_bash(
+    @abstractmethod
+    def execute(
         self,
-        cmd_string: str,
+        command: str,
+        cwd: str = "",
         *,
-        login: bool = False,
-        timeout: int = 120,
+        timeout: int | None = None,
         stdin_data: str | None = None,
-    ) -> ProcessHandle:
-        """Spawn a bash process to run *cmd_string*.
-
-        Returns a ProcessHandle (subprocess.Popen or _ThreadedProcessHandle).
-        Must be overridden by every backend.
-        """
-        raise NotImplementedError(f"{type(self).__name__} must implement _run_bash()")
+    ) -> dict:
+        """Execute a command, return {"output": str, "returncode": int}."""
+        ...
 
     @abstractmethod
     def cleanup(self):
@@ -572,8 +558,40 @@ class BaseEnvironment(ABC):
             pass
 
     def _prepare_command(self, command: str) -> tuple[str, str | None]:
-        """Transform sudo commands if SUDO_PASSWORD is available."""
+        """Transform sudo commands if SUDO_PASSWORD is available.
+
+        Returns:
+            (transformed_command, sudo_stdin) — see _transform_sudo_command
+            for the full contract.  Callers that drive a subprocess directly
+            should prepend sudo_stdin (when not None) to any stdin_data they
+            pass to Popen.  Callers that embed stdin via heredoc (modal)
+            handle sudo_stdin in their own execute() method.
+        """
         from tools.terminal_tool import _transform_sudo_command
 
         return _transform_sudo_command(command)
 
+    def _build_run_kwargs(
+        self, timeout: int | None, stdin_data: str | None = None
+    ) -> dict:
+        """Build common subprocess.run kwargs for non-interactive execution."""
+        kw = {
+            "text": True,
+            "timeout": timeout or self.timeout,
+            "encoding": "utf-8",
+            "errors": "replace",
+            "stdout": subprocess.PIPE,
+            "stderr": subprocess.STDOUT,
+        }
+        if stdin_data is not None:
+            kw["input"] = stdin_data
+        else:
+            kw["stdin"] = subprocess.DEVNULL
+        return kw
+
+    def _timeout_result(self, timeout: int | None) -> dict:
+        """Standard return dict when a command times out."""
+        return {
+            "output": f"Command timed out after {timeout or self.timeout}s",
+            "returncode": 124,
+        }

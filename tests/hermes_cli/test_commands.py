@@ -20,7 +20,6 @@ from hermes_cli.commands import (
     discord_skill_commands,
     gateway_help_lines,
     resolve_command,
-    slack_subcommand_map,
     telegram_bot_commands,
     telegram_menu_commands,
 )
@@ -39,6 +38,7 @@ def _completions(completer: SlashCommandCompleter, text: str):
 # CommandDef registry tests
 # ---------------------------------------------------------------------------
 
+
 class TestCommandRegistry:
     def test_registry_is_nonempty(self):
         assert len(COMMAND_REGISTRY) > 30
@@ -49,7 +49,9 @@ class TestCommandRegistry:
 
     def test_no_duplicate_canonical_names(self):
         names = [cmd.name for cmd in COMMAND_REGISTRY]
-        assert len(names) == len(set(names)), f"Duplicate names: {[n for n in names if names.count(n) > 1]}"
+        assert len(names) == len(set(names)), (
+            f"Duplicate names: {[n for n in names if names.count(n) > 1]}"
+        )
 
     def test_no_alias_collides_with_canonical_name(self):
         """An alias must not shadow another command's canonical name."""
@@ -60,13 +62,24 @@ class TestCommandRegistry:
                     # reset -> new is intentional (reset IS an alias for new)
                     target = next(c for c in COMMAND_REGISTRY if c.name == alias)
                     # This should only happen if the alias points to the same entry
-                    assert resolve_command(alias).name == cmd.name or alias == cmd.name, \
+                    assert (
+                        resolve_command(alias).name == cmd.name or alias == cmd.name
+                    ), (
                         f"Alias '{alias}' of '{cmd.name}' shadows canonical '{target.name}'"
+                    )
 
     def test_every_entry_has_valid_category(self):
-        valid_categories = {"Session", "Configuration", "Tools & Skills", "Info", "Exit"}
+        valid_categories = {
+            "Session",
+            "Configuration",
+            "Tools & Skills",
+            "Info",
+            "Exit",
+        }
         for cmd in COMMAND_REGISTRY:
-            assert cmd.category in valid_categories, f"{cmd.name} has invalid category '{cmd.category}'"
+            assert cmd.category in valid_categories, (
+                f"{cmd.name} has invalid category '{cmd.category}'"
+            )
 
     def test_reasoning_subcommands_are_in_logical_order(self):
         reasoning = next(cmd for cmd in COMMAND_REGISTRY if cmd.name == "reasoning")
@@ -81,13 +94,15 @@ class TestCommandRegistry:
 
     def test_cli_only_and_gateway_only_are_mutually_exclusive(self):
         for cmd in COMMAND_REGISTRY:
-            assert not (cmd.cli_only and cmd.gateway_only), \
+            assert not (cmd.cli_only and cmd.gateway_only), (
                 f"{cmd.name} cannot be both cli_only and gateway_only"
+            )
 
 
 # ---------------------------------------------------------------------------
 # resolve_command tests
 # ---------------------------------------------------------------------------
+
 
 class TestResolveCommand:
     def test_canonical_name_resolves(self):
@@ -116,19 +131,22 @@ class TestResolveCommand:
 # Derived dicts (backwards compat)
 # ---------------------------------------------------------------------------
 
+
 class TestDerivedDicts:
     def test_commands_dict_excludes_gateway_only(self):
         """gateway_only commands should NOT appear in the CLI COMMANDS dict."""
         for cmd in COMMAND_REGISTRY:
             if cmd.gateway_only:
-                assert f"/{cmd.name}" not in COMMANDS, \
+                assert f"/{cmd.name}" not in COMMANDS, (
                     f"gateway_only command /{cmd.name} should not be in COMMANDS"
+                )
 
     def test_commands_dict_includes_all_cli_commands(self):
         for cmd in COMMAND_REGISTRY:
             if not cmd.gateway_only:
-                assert f"/{cmd.name}" in COMMANDS, \
+                assert f"/{cmd.name}" in COMMANDS, (
                     f"/{cmd.name} missing from COMMANDS dict"
+                )
 
     def test_commands_dict_includes_aliases(self):
         assert "/bg" in COMMANDS
@@ -139,31 +157,38 @@ class TestDerivedDicts:
         assert "/gateway" in COMMANDS
 
     def test_commands_by_category_covers_all_categories(self):
-        registry_categories = {cmd.category for cmd in COMMAND_REGISTRY if not cmd.gateway_only}
+        registry_categories = {
+            cmd.category for cmd in COMMAND_REGISTRY if not cmd.gateway_only
+        }
         assert set(COMMANDS_BY_CATEGORY.keys()) == registry_categories
 
     def test_every_command_has_nonempty_description(self):
         for cmd, desc in COMMANDS.items():
-            assert isinstance(desc, str) and len(desc) > 0, f"{cmd} has empty description"
+            assert isinstance(desc, str) and len(desc) > 0, (
+                f"{cmd} has empty description"
+            )
 
 
 # ---------------------------------------------------------------------------
 # Gateway helpers
 # ---------------------------------------------------------------------------
 
+
 class TestGatewayKnownCommands:
     def test_excludes_cli_only_without_config_gate(self):
         for cmd in COMMAND_REGISTRY:
             if cmd.cli_only and not cmd.gateway_config_gate:
-                assert cmd.name not in GATEWAY_KNOWN_COMMANDS, \
+                assert cmd.name not in GATEWAY_KNOWN_COMMANDS, (
                     f"cli_only command '{cmd.name}' should not be in GATEWAY_KNOWN_COMMANDS"
+                )
 
     def test_includes_config_gated_cli_only(self):
         """Commands with gateway_config_gate are always in GATEWAY_KNOWN_COMMANDS."""
         for cmd in COMMAND_REGISTRY:
             if cmd.gateway_config_gate:
-                assert cmd.name in GATEWAY_KNOWN_COMMANDS, \
+                assert cmd.name in GATEWAY_KNOWN_COMMANDS, (
                     f"config-gated command '{cmd.name}' should be in GATEWAY_KNOWN_COMMANDS"
+                )
 
     def test_includes_gateway_commands(self):
         for cmd in COMMAND_REGISTRY:
@@ -190,8 +215,9 @@ class TestGatewayHelpLines:
         joined = "\n".join(lines)
         for cmd in COMMAND_REGISTRY:
             if cmd.cli_only and not cmd.gateway_config_gate:
-                assert f"`/{cmd.name}" not in joined, \
+                assert f"`/{cmd.name}" not in joined, (
                     f"cli_only command /{cmd.name} should not be in gateway help"
+                )
 
     def test_includes_alias_note_for_bg(self):
         lines = gateway_help_lines()
@@ -228,31 +254,10 @@ class TestTelegramBotCommands:
                 assert tg_name not in names
 
 
-class TestSlackSubcommandMap:
-    def test_returns_dict(self):
-        mapping = slack_subcommand_map()
-        assert isinstance(mapping, dict)
-        assert len(mapping) > 10
-
-    def test_values_are_slash_prefixed(self):
-        for key, val in slack_subcommand_map().items():
-            assert val.startswith("/"), f"Slack mapping for '{key}' should start with /"
-
-    def test_includes_aliases(self):
-        mapping = slack_subcommand_map()
-        assert "bg" in mapping
-        assert "reset" in mapping
-
-    def test_excludes_cli_only_without_config_gate(self):
-        mapping = slack_subcommand_map()
-        for cmd in COMMAND_REGISTRY:
-            if cmd.cli_only and not cmd.gateway_config_gate:
-                assert cmd.name not in mapping
-
-
 # ---------------------------------------------------------------------------
 # Config-gated gateway commands
 # ---------------------------------------------------------------------------
+
 
 class TestGatewayConfigGate:
     """Tests for the gateway_config_gate mechanism on CommandDef."""
@@ -304,26 +309,11 @@ class TestGatewayConfigGate:
         names = {name for name, _ in telegram_bot_commands()}
         assert "verbose" in names
 
-    def test_config_gate_excluded_from_slack_when_off(self, tmp_path, monkeypatch):
-        config_file = tmp_path / "config.yaml"
-        config_file.write_text("display:\n  tool_progress_command: false\n")
-        monkeypatch.setenv("HERMES_HOME", str(tmp_path))
-
-        mapping = slack_subcommand_map()
-        assert "verbose" not in mapping
-
-    def test_config_gate_included_in_slack_when_on(self, tmp_path, monkeypatch):
-        config_file = tmp_path / "config.yaml"
-        config_file.write_text("display:\n  tool_progress_command: true\n")
-        monkeypatch.setenv("HERMES_HOME", str(tmp_path))
-
-        mapping = slack_subcommand_map()
-        assert "verbose" in mapping
-
 
 # ---------------------------------------------------------------------------
 # Autocomplete (SlashCommandCompleter)
 # ---------------------------------------------------------------------------
+
 
 class TestSlashCommandCompleter:
     # -- basic prefix completion -----------------------------------------
@@ -445,18 +435,6 @@ class TestSubcommands:
         assert "high" in subs
         assert "show" in subs
         assert "hide" in subs
-
-    def test_fast_has_subcommands(self):
-        assert "/fast" in SUBCOMMANDS
-        subs = SUBCOMMANDS["/fast"]
-        assert "fast" in subs
-        assert "normal" in subs
-        assert "status" in subs
-
-    def test_voice_has_subcommands(self):
-        assert "/voice" in SUBCOMMANDS
-        assert "on" in SUBCOMMANDS["/voice"]
-        assert "off" in SUBCOMMANDS["/voice"]
 
     def test_cron_has_subcommands(self):
         assert "/cron" in SUBCOMMANDS
@@ -692,10 +670,7 @@ class TestTelegramMenuCommands:
         # Set up a config with a telegram-specific disabled list
         config_file = tmp_path / "config.yaml"
         config_file.write_text(
-            "skills:\n"
-            "  platform_disabled:\n"
-            "    telegram:\n"
-            "      - my-disabled-skill\n"
+            "skills:\n  platform_disabled:\n    telegram:\n      - my-disabled-skill\n"
         )
         monkeypatch.setenv("HERMES_HOME", str(tmp_path))
 

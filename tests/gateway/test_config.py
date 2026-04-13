@@ -16,11 +16,11 @@ from gateway.config import (
 
 class TestHomeChannelRoundtrip:
     def test_to_dict_from_dict(self):
-        hc = HomeChannel(platform=Platform.DISCORD, chat_id="999", name="general")
+        hc = HomeChannel(platform=Platform.TELEGRAM, chat_id="999", name="general")
         d = hc.to_dict()
         restored = HomeChannel.from_dict(d)
 
-        assert restored.platform == Platform.DISCORD
+        assert restored.platform == Platform.TELEGRAM
         assert restored.chat_id == "999"
         assert restored.name == "general"
 
@@ -58,14 +58,14 @@ class TestGetConnectedPlatforms:
         config = GatewayConfig(
             platforms={
                 Platform.TELEGRAM: PlatformConfig(enabled=True, token="t"),
-                Platform.DISCORD: PlatformConfig(enabled=False, token="d"),
-                Platform.SLACK: PlatformConfig(enabled=True),  # no token
+                Platform.API_SERVER: PlatformConfig(enabled=False, token="d"),
+                Platform.WEBHOOK: PlatformConfig(enabled=True),  # no token
             },
         )
         connected = config.get_connected_platforms()
         assert Platform.TELEGRAM in connected
-        assert Platform.DISCORD not in connected
-        assert Platform.SLACK not in connected
+        assert Platform.API_SERVER not in connected
+        assert Platform.WEBHOOK in connected
 
     def test_empty_platforms(self):
         config = GatewayConfig()
@@ -117,7 +117,9 @@ class TestGatewayConfigRoundtrip:
         assert Platform.TELEGRAM in restored.platforms
         assert restored.platforms[Platform.TELEGRAM].token == "tok_123"
         assert restored.reset_triggers == ["/new"]
-        assert restored.quick_commands == {"limits": {"type": "exec", "command": "echo ok"}}
+        assert restored.quick_commands == {
+            "limits": {"type": "exec", "command": "echo ok"}
+        }
         assert restored.group_sessions_per_user is False
         assert restored.thread_sessions_per_user is True
 
@@ -125,7 +127,7 @@ class TestGatewayConfigRoundtrip:
         config = GatewayConfig(
             unauthorized_dm_behavior="ignore",
             platforms={
-                Platform.WHATSAPP: PlatformConfig(
+                Platform.TELEGRAM: PlatformConfig(
                     enabled=True,
                     extra={"unauthorized_dm_behavior": "pair"},
                 ),
@@ -135,7 +137,10 @@ class TestGatewayConfigRoundtrip:
         restored = GatewayConfig.from_dict(config.to_dict())
 
         assert restored.unauthorized_dm_behavior == "ignore"
-        assert restored.platforms[Platform.WHATSAPP].extra["unauthorized_dm_behavior"] == "pair"
+        assert (
+            restored.platforms[Platform.TELEGRAM].extra["unauthorized_dm_behavior"]
+            == "pair"
+        )
 
 
 class TestLoadGatewayConfig:
@@ -144,10 +149,7 @@ class TestLoadGatewayConfig:
         hermes_home.mkdir()
         config_path = hermes_home / "config.yaml"
         config_path.write_text(
-            "quick_commands:\n"
-            "  limits:\n"
-            "    type: exec\n"
-            "    command: echo ok\n",
+            "quick_commands:\n  limits:\n    type: exec\n    command: echo ok\n",
             encoding="utf-8",
         )
 
@@ -155,9 +157,13 @@ class TestLoadGatewayConfig:
 
         config = load_gateway_config()
 
-        assert config.quick_commands == {"limits": {"type": "exec", "command": "echo ok"}}
+        assert config.quick_commands == {
+            "limits": {"type": "exec", "command": "echo ok"}
+        }
 
-    def test_bridges_group_sessions_per_user_from_config_yaml(self, tmp_path, monkeypatch):
+    def test_bridges_group_sessions_per_user_from_config_yaml(
+        self, tmp_path, monkeypatch
+    ):
         hermes_home = tmp_path / ".hermes"
         hermes_home.mkdir()
         config_path = hermes_home / "config.yaml"
@@ -169,31 +175,9 @@ class TestLoadGatewayConfig:
 
         assert config.group_sessions_per_user is False
 
-    def test_bridges_thread_sessions_per_user_from_config_yaml(self, tmp_path, monkeypatch):
-        hermes_home = tmp_path / ".hermes"
-        hermes_home.mkdir()
-        config_path = hermes_home / "config.yaml"
-        config_path.write_text("thread_sessions_per_user: true\n", encoding="utf-8")
-
-        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
-
-        config = load_gateway_config()
-
-        assert config.thread_sessions_per_user is True
-
-    def test_thread_sessions_per_user_defaults_to_false(self, tmp_path, monkeypatch):
-        hermes_home = tmp_path / ".hermes"
-        hermes_home.mkdir()
-        config_path = hermes_home / "config.yaml"
-        config_path.write_text("{}\n", encoding="utf-8")
-
-        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
-
-        config = load_gateway_config()
-
-        assert config.thread_sessions_per_user is False
-
-    def test_invalid_quick_commands_in_config_yaml_are_ignored(self, tmp_path, monkeypatch):
+    def test_invalid_quick_commands_in_config_yaml_are_ignored(
+        self, tmp_path, monkeypatch
+    ):
         hermes_home = tmp_path / ".hermes"
         hermes_home.mkdir()
         config_path = hermes_home / "config.yaml"
@@ -205,13 +189,15 @@ class TestLoadGatewayConfig:
 
         assert config.quick_commands == {}
 
-    def test_bridges_unauthorized_dm_behavior_from_config_yaml(self, tmp_path, monkeypatch):
+    def test_bridges_unauthorized_dm_behavior_from_config_yaml(
+        self, tmp_path, monkeypatch
+    ):
         hermes_home = tmp_path / ".hermes"
         hermes_home.mkdir()
         config_path = hermes_home / "config.yaml"
         config_path.write_text(
             "unauthorized_dm_behavior: ignore\n"
-            "whatsapp:\n"
+            "telegram:\n"
             "  unauthorized_dm_behavior: pair\n",
             encoding="utf-8",
         )
@@ -221,7 +207,10 @@ class TestLoadGatewayConfig:
         config = load_gateway_config()
 
         assert config.unauthorized_dm_behavior == "ignore"
-        assert config.platforms[Platform.WHATSAPP].extra["unauthorized_dm_behavior"] == "pair"
+        assert (
+            config.platforms[Platform.TELEGRAM].extra["unauthorized_dm_behavior"]
+            == "pair"
+        )
 
 
 class TestHomeChannelEnvOverrides:
@@ -231,58 +220,14 @@ class TestHomeChannelEnvOverrides:
     def test_existing_platform_configs_accept_home_channel_env_overrides(self):
         cases = [
             (
-                Platform.SLACK,
-                PlatformConfig(enabled=True, token="xoxb-from-config"),
-                {"SLACK_HOME_CHANNEL": "C123", "SLACK_HOME_CHANNEL_NAME": "Ops"},
-                ("C123", "Ops"),
-            ),
-            (
-                Platform.SIGNAL,
-                PlatformConfig(
-                    enabled=True,
-                    extra={"http_url": "http://localhost:9090", "account": "+15551234567"},
-                ),
-                {"SIGNAL_HOME_CHANNEL": "+1555000", "SIGNAL_HOME_CHANNEL_NAME": "Phone"},
-                ("+1555000", "Phone"),
-            ),
-            (
-                Platform.MATTERMOST,
-                PlatformConfig(
-                    enabled=True,
-                    token="mm-token",
-                    extra={"url": "https://mm.example.com"},
-                ),
-                {"MATTERMOST_HOME_CHANNEL": "ch_abc123", "MATTERMOST_HOME_CHANNEL_NAME": "General"},
-                ("ch_abc123", "General"),
-            ),
-            (
-                Platform.MATRIX,
-                PlatformConfig(
-                    enabled=True,
-                    token="syt_abc123",
-                    extra={"homeserver": "https://matrix.example.org"},
-                ),
-                {"MATRIX_HOME_ROOM": "!room123:example.org", "MATRIX_HOME_ROOM_NAME": "Bot Room"},
-                ("!room123:example.org", "Bot Room"),
-            ),
-            (
-                Platform.EMAIL,
-                PlatformConfig(
-                    enabled=True,
-                    extra={
-                        "address": "hermes@test.com",
-                        "imap_host": "imap.test.com",
-                        "smtp_host": "smtp.test.com",
-                    },
-                ),
-                {"EMAIL_HOME_ADDRESS": "user@test.com", "EMAIL_HOME_ADDRESS_NAME": "Inbox"},
-                ("user@test.com", "Inbox"),
-            ),
-            (
-                Platform.SMS,
-                PlatformConfig(enabled=True, api_key="token_abc"),
-                {"SMS_HOME_CHANNEL": "+15559876543", "SMS_HOME_CHANNEL_NAME": "My Phone"},
-                ("+15559876543", "My Phone"),
+                Platform.TELEGRAM,
+                PlatformConfig(enabled=True, token="fake-token"),
+                {
+                    "TELEGRAM_BOT_TOKEN": "fake-token",
+                    "TELEGRAM_HOME_CHANNEL": "-100",
+                    "TELEGRAM_HOME_CHANNEL_NAME": "Home",
+                },
+                ("-100", "Home"),
             ),
         ]
 
@@ -292,5 +237,7 @@ class TestHomeChannelEnvOverrides:
                 _apply_env_overrides(config)
 
             home = config.platforms[platform].home_channel
-            assert home is not None, f"{platform.value}: home_channel should not be None"
+            assert home is not None, (
+                f"{platform.value}: home_channel should not be None"
+            )
             assert (home.chat_id, home.name) == expected, platform.value

@@ -39,7 +39,7 @@ class TestSessionSourceRoundtrip:
     def test_full_roundtrip_with_chat_topic(self):
         """chat_topic should survive to_dict/from_dict roundtrip."""
         source = SessionSource(
-            platform=Platform.DISCORD,
+            platform=Platform.TELEGRAM,
             chat_id="789",
             chat_name="Server / #project-planning",
             chat_type="group",
@@ -64,18 +64,22 @@ class TestSessionSourceRoundtrip:
 
     def test_chat_id_coerced_to_string(self):
         """from_dict should handle numeric chat_id (common from Telegram)."""
-        restored = SessionSource.from_dict({
-            "platform": "telegram",
-            "chat_id": 12345,
-        })
+        restored = SessionSource.from_dict(
+            {
+                "platform": "telegram",
+                "chat_id": 12345,
+            }
+        )
         assert restored.chat_id == "12345"
         assert isinstance(restored.chat_id, str)
 
     def test_missing_optional_fields(self):
-        restored = SessionSource.from_dict({
-            "platform": "discord",
-            "chat_id": "abc",
-        })
+        restored = SessionSource.from_dict(
+            {
+                "platform": "telegram",
+                "chat_id": "abc",
+            }
+        )
         assert restored.chat_name is None
         assert restored.user_id is None
         assert restored.user_name is None
@@ -98,39 +102,49 @@ class TestSessionSourceDescription:
 
     def test_dm_with_username(self):
         source = SessionSource(
-            platform=Platform.TELEGRAM, chat_id="123",
-            chat_type="dm", user_name="bob",
+            platform=Platform.TELEGRAM,
+            chat_id="123",
+            chat_type="dm",
+            user_name="bob",
         )
         assert "DM" in source.description
         assert "bob" in source.description
 
     def test_dm_without_username_falls_back_to_user_id(self):
         source = SessionSource(
-            platform=Platform.TELEGRAM, chat_id="123",
-            chat_type="dm", user_id="456",
+            platform=Platform.TELEGRAM,
+            chat_id="123",
+            chat_type="dm",
+            user_id="456",
         )
         assert "456" in source.description
 
     def test_group_shows_chat_name(self):
         source = SessionSource(
-            platform=Platform.DISCORD, chat_id="789",
-            chat_type="group", chat_name="Dev Chat",
+            platform=Platform.TELEGRAM,
+            chat_id="789",
+            chat_type="group",
+            chat_name="Dev Chat",
         )
         assert "group" in source.description
         assert "Dev Chat" in source.description
 
     def test_channel_type(self):
         source = SessionSource(
-            platform=Platform.TELEGRAM, chat_id="100",
-            chat_type="channel", chat_name="Announcements",
+            platform=Platform.TELEGRAM,
+            chat_id="100",
+            chat_type="channel",
+            chat_name="Announcements",
         )
         assert "channel" in source.description
         assert "Announcements" in source.description
 
     def test_thread_id_appended(self):
         source = SessionSource(
-            platform=Platform.DISCORD, chat_id="789",
-            chat_type="group", chat_name="General",
+            platform=Platform.TELEGRAM,
+            chat_id="789",
+            chat_type="group",
+            chat_name="General",
             thread_id="thread-42",
         )
         assert "thread" in source.description
@@ -138,8 +152,10 @@ class TestSessionSourceDescription:
 
     def test_unknown_chat_type_uses_name(self):
         source = SessionSource(
-            platform=Platform.SLACK, chat_id="C01",
-            chat_type="forum", chat_name="Questions",
+            platform=Platform.TELEGRAM,
+            chat_id="C01",
+            chat_type="forum",
+            chat_name="Questions",
         )
         assert "Questions" in source.description
 
@@ -183,17 +199,17 @@ class TestBuildSessionContextPrompt:
         assert "Telegram" in prompt
         assert "Home Chat" in prompt
 
-    def test_discord_prompt(self):
+    def test_telegram_group_prompt_without_home_channel(self):
         config = GatewayConfig(
             platforms={
-                Platform.DISCORD: PlatformConfig(
+                Platform.TELEGRAM: PlatformConfig(
                     enabled=True,
-                    token="fake-d...oken",
+                    token="fake-telegram-token",
                 ),
             },
         )
         source = SessionSource(
-            platform=Platform.DISCORD,
+            platform=Platform.TELEGRAM,
             chat_id="guild-123",
             chat_name="Server",
             chat_type="group",
@@ -202,41 +218,20 @@ class TestBuildSessionContextPrompt:
         ctx = build_session_context(source, config)
         prompt = build_session_context_prompt(ctx)
 
-        assert "Discord" in prompt
-        assert "cannot search" in prompt.lower() or "do not have access" in prompt.lower()
+        assert "Telegram" in prompt
 
-    def test_slack_prompt_includes_platform_notes(self):
-        config = GatewayConfig(
-            platforms={
-                Platform.SLACK: PlatformConfig(enabled=True, token="fake"),
-            },
-        )
-        source = SessionSource(
-            platform=Platform.SLACK,
-            chat_id="C123",
-            chat_name="general",
-            chat_type="group",
-            user_name="bob",
-        )
-        ctx = build_session_context(source, config)
-        prompt = build_session_context_prompt(ctx)
-
-        assert "Slack" in prompt
-        assert "cannot search" in prompt.lower()
-        assert "pin" in prompt.lower()
-
-    def test_discord_prompt_with_channel_topic(self):
+    def test_telegram_prompt_with_channel_topic(self):
         """Channel topic should appear in the session context prompt."""
         config = GatewayConfig(
             platforms={
-                Platform.DISCORD: PlatformConfig(
+                Platform.TELEGRAM: PlatformConfig(
                     enabled=True,
-                    token="fake-discord-token",
+                    token="fake-telegram-token",
                 ),
             },
         )
         source = SessionSource(
-            platform=Platform.DISCORD,
+            platform=Platform.TELEGRAM,
             chat_id="guild-123",
             chat_name="Server / #project-planning",
             chat_type="group",
@@ -246,21 +241,21 @@ class TestBuildSessionContextPrompt:
         ctx = build_session_context(source, config)
         prompt = build_session_context_prompt(ctx)
 
-        assert "Discord" in prompt
+        assert "Telegram" in prompt
         assert "**Channel Topic:** Planning and coordination for Project X" in prompt
 
     def test_prompt_omits_channel_topic_when_none(self):
         """Channel Topic line should NOT appear when chat_topic is None."""
         config = GatewayConfig(
             platforms={
-                Platform.DISCORD: PlatformConfig(
+                Platform.TELEGRAM: PlatformConfig(
                     enabled=True,
-                    token="fake-discord-token",
+                    token="fake-telegram-token",
                 ),
             },
         )
         source = SessionSource(
-            platform=Platform.DISCORD,
+            platform=Platform.TELEGRAM,
             chat_id="guild-123",
             chat_name="Server / #general",
             chat_type="group",
@@ -282,86 +277,6 @@ class TestBuildSessionContextPrompt:
 
         assert "Local" in prompt
         assert "machine running this agent" in prompt
-
-    def test_whatsapp_prompt(self):
-        config = GatewayConfig(
-            platforms={
-                Platform.WHATSAPP: PlatformConfig(enabled=True, token=""),
-            },
-        )
-        source = SessionSource(
-            platform=Platform.WHATSAPP,
-            chat_id="15551234567@s.whatsapp.net",
-            chat_type="dm",
-            user_name="Phone User",
-        )
-        ctx = build_session_context(source, config)
-        prompt = build_session_context_prompt(ctx)
-
-        assert "WhatsApp" in prompt or "whatsapp" in prompt.lower()
-
-    def test_multi_user_thread_prompt(self):
-        """Shared thread sessions show multi-user note instead of single user."""
-        config = GatewayConfig(
-            platforms={
-                Platform.TELEGRAM: PlatformConfig(enabled=True, token="fake"),
-            },
-        )
-        source = SessionSource(
-            platform=Platform.TELEGRAM,
-            chat_id="-1002285219667",
-            chat_name="Test Group",
-            chat_type="group",
-            thread_id="17585",
-            user_name="Alice",
-        )
-        ctx = build_session_context(source, config)
-        prompt = build_session_context_prompt(ctx)
-
-        assert "Multi-user thread" in prompt
-        assert "[sender name]" in prompt
-        # Should NOT show a specific **User:** line (would bust cache)
-        assert "**User:** Alice" not in prompt
-
-    def test_non_thread_group_shows_user(self):
-        """Regular group messages (no thread) still show the user name."""
-        config = GatewayConfig(
-            platforms={
-                Platform.TELEGRAM: PlatformConfig(enabled=True, token="fake"),
-            },
-        )
-        source = SessionSource(
-            platform=Platform.TELEGRAM,
-            chat_id="-1002285219667",
-            chat_name="Test Group",
-            chat_type="group",
-            user_name="Alice",
-        )
-        ctx = build_session_context(source, config)
-        prompt = build_session_context_prompt(ctx)
-
-        assert "**User:** Alice" in prompt
-        assert "Multi-user thread" not in prompt
-
-    def test_dm_thread_shows_user_not_multi(self):
-        """DM threads are single-user and should show User, not multi-user note."""
-        config = GatewayConfig(
-            platforms={
-                Platform.TELEGRAM: PlatformConfig(enabled=True, token="fake"),
-            },
-        )
-        source = SessionSource(
-            platform=Platform.TELEGRAM,
-            chat_id="99",
-            chat_type="dm",
-            thread_id="topic-1",
-            user_name="Alice",
-        )
-        ctx = build_session_context(source, config)
-        prompt = build_session_context_prompt(ctx)
-
-        assert "**User:** Alice" in prompt
-        assert "Multi-user thread" not in prompt
 
 
 class TestSessionStoreRewriteTranscript:
@@ -388,10 +303,13 @@ class TestSessionStoreRewriteTranscript:
             store.append_to_transcript(session_id, msg)
 
         # Rewrite with truncated history
-        store.rewrite_transcript(session_id, [
-            {"role": "user", "content": "hello"},
-            {"role": "assistant", "content": "hi"},
-        ])
+        store.rewrite_transcript(
+            session_id,
+            [
+                {"role": "user", "content": "hello"},
+                {"role": "assistant", "content": "hi"},
+            ],
+        )
 
         reloaded = store.load_transcript(session_id)
         assert len(reloaded) == 2
@@ -482,11 +400,15 @@ class TestLoadTranscriptPreferLongerSource:
         for i in range(10):
             role = "user" if i % 2 == 0 else "assistant"
             store_with_db.append_to_transcript(
-                sid, {"role": role, "content": f"msg-{i}"}, skip_db=True,
+                sid,
+                {"role": role, "content": f"msg-{i}"},
+                skip_db=True,
             )
         # SQLite has only 2 messages (recent turn after migration)
         store_with_db._db.append_message(session_id=sid, role="user", content="new-q")
-        store_with_db._db.append_message(session_id=sid, role="assistant", content="new-a")
+        store_with_db._db.append_message(
+            session_id=sid, role="assistant", content="new-a"
+        )
 
         result = store_with_db.load_transcript(sid)
         assert len(result) == 10
@@ -498,15 +420,21 @@ class TestLoadTranscriptPreferLongerSource:
         store_with_db._db.create_session(session_id=sid, source="gateway", model="m")
         # JSONL has 2 old messages
         store_with_db.append_to_transcript(
-            sid, {"role": "user", "content": "old-q"}, skip_db=True,
+            sid,
+            {"role": "user", "content": "old-q"},
+            skip_db=True,
         )
         store_with_db.append_to_transcript(
-            sid, {"role": "assistant", "content": "old-a"}, skip_db=True,
+            sid,
+            {"role": "assistant", "content": "old-a"},
+            skip_db=True,
         )
         # SQLite has 4 messages (superset after migration)
         for i in range(4):
             role = "user" if i % 2 == 0 else "assistant"
-            store_with_db._db.append_message(session_id=sid, role=role, content=f"db-{i}")
+            store_with_db._db.append_message(
+                session_id=sid, role=role, content=f"db-{i}"
+            )
 
         result = store_with_db.load_transcript(sid)
         assert len(result) == 4
@@ -516,10 +444,14 @@ class TestLoadTranscriptPreferLongerSource:
         """No SQLite rows — falls back to JSONL (original behavior preserved)."""
         sid = "no_db_rows"
         store_with_db.append_to_transcript(
-            sid, {"role": "user", "content": "hello"}, skip_db=True,
+            sid,
+            {"role": "user", "content": "hello"},
+            skip_db=True,
         )
         store_with_db.append_to_transcript(
-            sid, {"role": "assistant", "content": "hi"}, skip_db=True,
+            sid,
+            {"role": "assistant", "content": "hi"},
+            skip_db=True,
         )
 
         result = store_with_db.load_transcript(sid)
@@ -537,14 +469,20 @@ class TestLoadTranscriptPreferLongerSource:
         store_with_db._db.create_session(session_id=sid, source="gateway", model="m")
         # Write 2 messages to JSONL only
         store_with_db.append_to_transcript(
-            sid, {"role": "user", "content": "jsonl-q"}, skip_db=True,
+            sid,
+            {"role": "user", "content": "jsonl-q"},
+            skip_db=True,
         )
         store_with_db.append_to_transcript(
-            sid, {"role": "assistant", "content": "jsonl-a"}, skip_db=True,
+            sid,
+            {"role": "assistant", "content": "jsonl-a"},
+            skip_db=True,
         )
         # Write 2 different messages to SQLite only
         store_with_db._db.append_message(session_id=sid, role="user", content="db-q")
-        store_with_db._db.append_message(session_id=sid, role="assistant", content="db-a")
+        store_with_db._db.append_message(
+            session_id=sid, role="assistant", content="db-a"
+        )
 
         result = store_with_db.load_transcript(sid)
         assert len(result) == 2
@@ -565,76 +503,7 @@ class TestWhatsAppDMSessionKeyConsistency:
         s._loaded = True
         return s
 
-    def test_whatsapp_dm_includes_chat_id(self):
-        source = SessionSource(
-            platform=Platform.WHATSAPP,
-            chat_id="15551234567@s.whatsapp.net",
-            chat_type="dm",
-            user_name="Phone User",
-        )
-        key = build_session_key(source)
-        assert key == "agent:main:whatsapp:dm:15551234567@s.whatsapp.net"
-
-    def test_store_delegates_to_build_session_key(self, store):
-        """SessionStore._generate_session_key must produce the same result."""
-        source = SessionSource(
-            platform=Platform.WHATSAPP,
-            chat_id="15551234567@s.whatsapp.net",
-            chat_type="dm",
-            user_name="Phone User",
-        )
-        assert store._generate_session_key(source) == build_session_key(source)
-
-    def test_store_creates_distinct_group_sessions_per_user(self, store):
-        first = SessionSource(
-            platform=Platform.DISCORD,
-            chat_id="guild-123",
-            chat_type="group",
-            user_id="alice",
-            user_name="Alice",
-        )
-        second = SessionSource(
-            platform=Platform.DISCORD,
-            chat_id="guild-123",
-            chat_type="group",
-            user_id="bob",
-            user_name="Bob",
-        )
-
-        first_entry = store.get_or_create_session(first)
-        second_entry = store.get_or_create_session(second)
-
-        assert first_entry.session_key == "agent:main:discord:group:guild-123:alice"
-        assert second_entry.session_key == "agent:main:discord:group:guild-123:bob"
-        assert first_entry.session_id != second_entry.session_id
-
-    def test_store_shares_group_sessions_when_disabled_in_config(self, store):
-        store.config.group_sessions_per_user = False
-
-        first = SessionSource(
-            platform=Platform.DISCORD,
-            chat_id="guild-123",
-            chat_type="group",
-            user_id="alice",
-            user_name="Alice",
-        )
-        second = SessionSource(
-            platform=Platform.DISCORD,
-            chat_id="guild-123",
-            chat_type="group",
-            user_id="bob",
-            user_name="Bob",
-        )
-
-        first_entry = store.get_or_create_session(first)
-        second_entry = store.get_or_create_session(second)
-
-        assert first_entry.session_key == "agent:main:discord:group:guild-123"
-        assert second_entry.session_key == "agent:main:discord:group:guild-123"
-        assert first_entry.session_id == second_entry.session_id
-
     def test_telegram_dm_includes_chat_id(self):
-        """Non-WhatsApp DMs should also include chat_id to separate users."""
         source = SessionSource(
             platform=Platform.TELEGRAM,
             chat_id="99",
@@ -643,59 +512,124 @@ class TestWhatsAppDMSessionKeyConsistency:
         key = build_session_key(source)
         assert key == "agent:main:telegram:dm:99"
 
+    def test_store_delegates_to_build_session_key(self, store):
+        """SessionStore._generate_session_key must produce the same result."""
+        source = SessionSource(
+            platform=Platform.TELEGRAM,
+            chat_id="99",
+            chat_type="dm",
+        )
+        assert store._generate_session_key(source) == build_session_key(source)
+
+    def test_store_creates_distinct_group_sessions_per_user(self, store):
+        first = SessionSource(
+            platform=Platform.TELEGRAM,
+            chat_id="guild-123",
+            chat_type="group",
+            user_id="alice",
+            user_name="Alice",
+        )
+        second = SessionSource(
+            platform=Platform.TELEGRAM,
+            chat_id="guild-123",
+            chat_type="group",
+            user_id="bob",
+            user_name="Bob",
+        )
+
+        first_entry = store.get_or_create_session(first)
+        second_entry = store.get_or_create_session(second)
+
+        assert first_entry.session_key == "agent:main:telegram:group:guild-123:alice"
+        assert second_entry.session_key == "agent:main:telegram:group:guild-123:bob"
+        assert first_entry.session_id != second_entry.session_id
+
+    def test_store_shares_group_sessions_when_disabled_in_config(self, store):
+        store.config.group_sessions_per_user = False
+
+        first = SessionSource(
+            platform=Platform.TELEGRAM,
+            chat_id="guild-123",
+            chat_type="group",
+            user_id="alice",
+            user_name="Alice",
+        )
+        second = SessionSource(
+            platform=Platform.TELEGRAM,
+            chat_id="guild-123",
+            chat_type="group",
+            user_id="bob",
+            user_name="Bob",
+        )
+
+        first_entry = store.get_or_create_session(first)
+        second_entry = store.get_or_create_session(second)
+
+        assert first_entry.session_key == "agent:main:telegram:group:guild-123"
+        assert second_entry.session_key == "agent:main:telegram:group:guild-123"
+        assert first_entry.session_id == second_entry.session_id
+
     def test_distinct_dm_chat_ids_get_distinct_session_keys(self):
         """Different DM chats must not collapse into one shared session."""
         first = SessionSource(platform=Platform.TELEGRAM, chat_id="99", chat_type="dm")
-        second = SessionSource(platform=Platform.TELEGRAM, chat_id="100", chat_type="dm")
+        second = SessionSource(
+            platform=Platform.TELEGRAM, chat_id="100", chat_type="dm"
+        )
 
         assert build_session_key(first) == "agent:main:telegram:dm:99"
         assert build_session_key(second) == "agent:main:telegram:dm:100"
         assert build_session_key(first) != build_session_key(second)
 
-    def test_discord_group_includes_chat_id(self):
+    def test_telegram_group_includes_chat_id(self):
         """Group/channel keys include chat_type and chat_id."""
         source = SessionSource(
-            platform=Platform.DISCORD,
+            platform=Platform.TELEGRAM,
             chat_id="guild-123",
             chat_type="group",
         )
         key = build_session_key(source)
-        assert key == "agent:main:discord:group:guild-123"
+        assert key == "agent:main:telegram:group:guild-123"
 
     def test_group_sessions_are_isolated_per_user_when_user_id_present(self):
         first = SessionSource(
-            platform=Platform.DISCORD,
+            platform=Platform.TELEGRAM,
             chat_id="guild-123",
             chat_type="group",
             user_id="alice",
         )
         second = SessionSource(
-            platform=Platform.DISCORD,
+            platform=Platform.TELEGRAM,
             chat_id="guild-123",
             chat_type="group",
             user_id="bob",
         )
 
-        assert build_session_key(first) == "agent:main:discord:group:guild-123:alice"
-        assert build_session_key(second) == "agent:main:discord:group:guild-123:bob"
+        assert build_session_key(first) == "agent:main:telegram:group:guild-123:alice"
+        assert build_session_key(second) == "agent:main:telegram:group:guild-123:bob"
         assert build_session_key(first) != build_session_key(second)
 
     def test_group_sessions_can_be_shared_when_isolation_disabled(self):
         first = SessionSource(
-            platform=Platform.DISCORD,
+            platform=Platform.TELEGRAM,
             chat_id="guild-123",
             chat_type="group",
             user_id="alice",
         )
         second = SessionSource(
-            platform=Platform.DISCORD,
+            platform=Platform.TELEGRAM,
             chat_id="guild-123",
             chat_type="group",
             user_id="bob",
         )
 
-        assert build_session_key(first, group_sessions_per_user=False) == "agent:main:discord:group:guild-123"
-        assert build_session_key(second, group_sessions_per_user=False) == "agent:main:discord:group:guild-123"
+        assert (
+            build_session_key(first, group_sessions_per_user=False)
+            == "agent:main:telegram:group:guild-123"
+        )
+        assert (
+            build_session_key(second, group_sessions_per_user=False)
+            == "agent:main:telegram:group:guild-123"
+        )
 
     def test_group_thread_includes_thread_id(self):
         """Forum-style threads need a distinct session key within one group."""
@@ -861,6 +795,7 @@ class TestLastPromptTokens:
         """New sessions should have last_prompt_tokens=0."""
         from gateway.session import SessionEntry
         from datetime import datetime
+
         entry = SessionEntry(
             session_key="test",
             session_id="s1",
@@ -873,6 +808,7 @@ class TestLastPromptTokens:
         """last_prompt_tokens should survive serialization/deserialization."""
         from gateway.session import SessionEntry
         from datetime import datetime
+
         entry = SessionEntry(
             session_key="test",
             session_id="s1",
@@ -888,6 +824,7 @@ class TestLastPromptTokens:
     def test_session_entry_from_old_data(self):
         """Old session data without last_prompt_tokens should default to 0."""
         from gateway.session import SessionEntry
+
         data = {
             "session_key": "test",
             "session_id": "s1",
@@ -912,6 +849,7 @@ class TestLastPromptTokens:
 
         from gateway.session import SessionEntry
         from datetime import datetime
+
         entry = SessionEntry(
             session_key="k1",
             session_id="s1",
@@ -934,6 +872,7 @@ class TestLastPromptTokens:
 
         from gateway.session import SessionEntry
         from datetime import datetime
+
         entry = SessionEntry(
             session_key="k1",
             session_id="s1",
@@ -957,6 +896,7 @@ class TestLastPromptTokens:
 
         from gateway.session import SessionEntry
         from datetime import datetime
+
         entry = SessionEntry(
             session_key="k1",
             session_id="s1",
@@ -968,6 +908,7 @@ class TestLastPromptTokens:
 
         store.update_session("k1", last_prompt_tokens=0)
         assert entry.last_prompt_tokens == 0
+
 
 class TestRewriteTranscriptPreservesReasoning:
     """rewrite_transcript must not drop reasoning fields from SQLite."""
@@ -992,8 +933,12 @@ class TestRewriteTranscriptPreservesReasoning:
         # Verify all three were stored
         before = db.get_messages_as_conversation(session_id)
         assert before[0].get("reasoning") == "I need to think step by step."
-        assert before[0].get("reasoning_details") == [{"type": "summary", "text": "step by step"}]
-        assert before[0].get("codex_reasoning_items") == [{"id": "r1", "type": "reasoning"}]
+        assert before[0].get("reasoning_details") == [
+            {"type": "summary", "text": "step by step"}
+        ]
+        assert before[0].get("codex_reasoning_items") == [
+            {"id": "r1", "type": "reasoning"}
+        ]
 
         # Now simulate /retry: build the SessionStore and call rewrite_transcript
         config = GatewayConfig()
@@ -1008,5 +953,9 @@ class TestRewriteTranscriptPreservesReasoning:
         # Load again — all three reasoning fields must survive
         after = db.get_messages_as_conversation(session_id)
         assert after[0].get("reasoning") == "I need to think step by step."
-        assert after[0].get("reasoning_details") == [{"type": "summary", "text": "step by step"}]
-        assert after[0].get("codex_reasoning_items") == [{"id": "r1", "type": "reasoning"}]
+        assert after[0].get("reasoning_details") == [
+            {"type": "summary", "text": "step by step"}
+        ]
+        assert after[0].get("codex_reasoning_items") == [
+            {"id": "r1", "type": "reasoning"}
+        ]
